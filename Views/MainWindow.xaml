@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:helpers="clr-namespace:NamePlateStudio.Helpers"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework"
         mc:Ignorable="d"
         Title="NamePlateStudio"
         Width="1280"
@@ -15,6 +16,8 @@
     <Window.Resources>
         <helpers:AlignmentOffsetConverter x:Key="AlignmentOffsetConverter" />
         <helpers:ImagePathToImageSourceConverter x:Key="ImagePathToImageSourceConverter" />
+        <helpers:MillimetersToPixelsConverter x:Key="MillimetersToPixelsConverter" />
+        <helpers:StringNotEmptyToVisibilityConverter x:Key="StringNotEmptyToVisibilityConverter" />
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
 
         <Style TargetType="TextBlock">
@@ -72,6 +75,50 @@
             <Setter Property="Margin" Value="8,0,0,0" />
             <Setter Property="Padding" Value="10,5" />
             <Setter Property="Background" Value="#334155" />
+        </Style>
+
+        <Style x:Key="PreviewResizeThumbStyle" TargetType="{x:Type primitives:Thumb}">
+            <Setter Property="Width" Value="20" />
+            <Setter Property="Height" Value="20" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="VerticalAlignment" Value="Bottom" />
+            <Setter Property="Cursor" Value="SizeNWSE" />
+            <Setter Property="ToolTip" Value="끌어서 크기 조절" />
+            <EventSetter Event="DragStarted" Handler="PreviewImageResizeThumb_DragStarted" />
+            <EventSetter Event="DragDelta" Handler="PreviewImageResizeThumb_DragDelta" />
+            <EventSetter Event="DragCompleted" Handler="PreviewImageResizeThumb_DragCompleted" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type primitives:Thumb}">
+                        <Border Background="#2563EB"
+                                BorderBrush="#FFFFFF"
+                                BorderThickness="2"
+                                CornerRadius="3" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PreviewRotateThumbStyle" TargetType="{x:Type primitives:Thumb}">
+            <Setter Property="Width" Value="22" />
+            <Setter Property="Height" Value="22" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="Margin" Value="0,3,0,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="ToolTip" Value="끌어서 회전 (Shift: 15° 단위)" />
+            <EventSetter Event="DragStarted" Handler="PreviewImageRotateThumb_DragStarted" />
+            <EventSetter Event="DragDelta" Handler="PreviewImageRotateThumb_DragDelta" />
+            <EventSetter Event="DragCompleted" Handler="PreviewImageRotateThumb_DragCompleted" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type primitives:Thumb}">
+                        <Ellipse Fill="#F59E0B"
+                                 Stroke="#FFFFFF"
+                                 StrokeThickness="2" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <Style TargetType="CheckBox">
@@ -139,6 +186,7 @@
                                   CanUserDeleteRows="True"
                                   HeadersVisibility="Column"
                                   GridLinesVisibility="Horizontal"
+                                  HorizontalScrollBarVisibility="Auto"
                                   RowHeaderWidth="0"
                                   MinHeight="138"
                                   MaxHeight="210"
@@ -148,6 +196,19 @@
                                 <DataGridTextColumn Header="표시명" Width="*" Binding="{Binding NameText, UpdateSourceTrigger=PropertyChanged}" />
                                 <DataGridTextColumn Header="소개 문구" Width="*" Binding="{Binding TitleText, UpdateSourceTrigger=PropertyChanged}" />
                                 <DataGridTextColumn Header="소속/메모" Width="1.2*" Binding="{Binding CompanyText, UpdateSourceTrigger=PropertyChanged}" />
+                                <DataGridTemplateColumn Header="뒷면" Width="88">
+                                    <DataGridTemplateColumn.Visibility>Collapsed</DataGridTemplateColumn.Visibility>
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Button Content="뒷면 편집"
+                                                    Padding="6,2"
+                                                    Visibility="Collapsed"
+                                                    Command="{Binding DataContext.OpenBackEditorCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                    CommandParameter="{Binding}" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTextColumn Header="뒷면 문구" Width="1.4*" Binding="{Binding BackContent, UpdateSourceTrigger=PropertyChanged}" />
                             </DataGrid.Columns>
                         </DataGrid>
                         <UniformGrid Columns="2" Margin="0,6,0,0">
@@ -155,10 +216,32 @@
                             <Button Content="선택 삭제" Command="{Binding RemoveEntryCommand}" Margin="8,4,0,0" Style="{StaticResource SecondaryButtonStyle}" />
                         </UniformGrid>
 
+                        <TextBlock Text="양면 인쇄" Style="{StaticResource SectionTitleStyle}" />
+                        <CheckBox Content="양면 인쇄 사용 (긴 쪽 넘김)"
+                                  IsChecked="{Binding IsDoubleSided}" />
+
                         <TextBlock Text="선택 항목 이미지" Style="{StaticResource SectionTitleStyle}" />
                         <TextBlock Text="{Binding SelectedEntry.NameText, StringFormat=선택: {0}, TargetNullValue=선택된 항목 없음}"
                                    Margin="0,0,0,6"
                                    Foreground="#64748B" />
+                        <Border Margin="0,2,0,8"
+                                Padding="10,7"
+                                Background="#EFF6FF"
+                                BorderBrush="#BFDBFE"
+                                BorderThickness="1"
+                                CornerRadius="4">
+                            <StackPanel>
+                                <CheckBox Content="앞면 그림을 모든 명찰에 적용"
+                                          IsChecked="{Binding ApplyFrontImagesToAllEntries}"
+                                          Margin="0"
+                                          FontWeight="SemiBold" />
+                                <TextBlock Text="배경 이미지와 이미지/로고를 모든 명찰에 동일하게 적용합니다."
+                                           Margin="22,4,0,0"
+                                           FontSize="11"
+                                           TextWrapping="Wrap"
+                                           Foreground="#475569" />
+                            </StackPanel>
+                        </Border>
 
                         <TextBlock Text="배경 이미지" Style="{StaticResource FieldLabelStyle}" />
                         <Grid>
@@ -180,6 +263,12 @@
                                     Style="{StaticResource SecondaryButtonStyle}" />
                         </Grid>
 
+                        <CheckBox Content="이미지 색상으로 앞면 배경"
+                                  IsChecked="{Binding MatchFrontBackgroundToImage}"
+                                  Margin="0,6,0,0"
+                                  FontWeight="SemiBold"
+                                  ToolTip="선택한 앞면 배경 이미지나 이미지/로고의 대표 색상을 앞면 배경색으로 자동 적용" />
+
                         <TextBlock Text="이미지/로고" Style="{StaticResource FieldLabelStyle}" />
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -199,6 +288,139 @@
                                     Margin="8,4,0,0"
                                     Style="{StaticResource SecondaryButtonStyle}" />
                         </Grid>
+
+                        <TextBlock Text="앞면 그림 회전" Style="{StaticResource FieldLabelStyle}" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="58" />
+                            </Grid.ColumnDefinitions>
+                            <Slider Minimum="0" Maximum="359"
+                                    TickFrequency="1"
+                                    IsSnapToTickEnabled="True"
+                                    Value="{Binding OverlayImageRotation, UpdateSourceTrigger=PropertyChanged}"
+                                    VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding OverlayImageRotation, StringFormat={}{0:0}°}"
+                                       HorizontalAlignment="Right"
+                                       VerticalAlignment="Center"
+                                       FontWeight="SemiBold" />
+                        </Grid>
+                        <UniformGrid Columns="3" Margin="0,4,0,0">
+                            <Button Content="작게" Command="{Binding ScaleFrontImageCommand}" CommandParameter="0.9" Style="{StaticResource SecondaryButtonStyle}" />
+                            <Button Content="크게" Command="{Binding ScaleFrontImageCommand}" CommandParameter="1.1" Margin="8,4,0,0" Style="{StaticResource SecondaryButtonStyle}" />
+                            <Button Content="명찰 맞춤" Command="{Binding FitFrontImageCommand}" Margin="8,4,0,0" Style="{StaticResource SecondaryButtonStyle}" />
+                            <Button Content="↶ 90°" Command="{Binding RotateFrontImageCommand}" CommandParameter="-90" Style="{StaticResource SecondaryButtonStyle}" />
+                            <Button Content="회전 초기화" Command="{Binding ResetFrontImageRotationCommand}" Margin="8,4,0,0" Style="{StaticResource SecondaryButtonStyle}" />
+                            <Button Content="↷ 90°" Command="{Binding RotateFrontImageCommand}" CommandParameter="90" Margin="8,4,0,0" Style="{StaticResource SecondaryButtonStyle}" />
+                        </UniformGrid>
+
+                        <TextBlock Text="선택 항목 뒷면" Style="{StaticResource SectionTitleStyle}" />
+                        <TextBlock Text="뒷면 문구" Style="{StaticResource FieldLabelStyle}" />
+                        <TextBox Text="{Binding SelectedEntry.BackContent, UpdateSourceTrigger=PropertyChanged}"
+                                 AcceptsReturn="True"
+                                 TextWrapping="Wrap"
+                                 MinHeight="70"
+                                 VerticalContentAlignment="Top" />
+
+                        <Grid Margin="0,12,0,4">
+                            <TextBlock Text="뒷면 그림"
+                                       VerticalAlignment="Center"
+                                       FontSize="13"
+                                       FontWeight="SemiBold"
+                                       Foreground="#334155" />
+                            <CheckBox Content="전체 적용"
+                                      IsChecked="{Binding ApplyBackImagesToAllEntries}"
+                                      HorizontalAlignment="Right"
+                                      Margin="0"
+                                      FontWeight="SemiBold"
+                                      ToolTip="뒷면 그림과 위치·크기·회전을 모든 명찰에 동일하게 적용" />
+                        </Grid>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="68" />
+                                <ColumnDefinition Width="68" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox Text="{Binding SelectedEntry.BackImagePath, Mode=OneWay}" IsReadOnly="True" />
+                            <Button Grid.Column="1"
+                                    Content="선택"
+                                    Command="{Binding SelectEntryBackImageCommand}"
+                                    Margin="8,4,0,0"
+                                    Style="{StaticResource SecondaryButtonStyle}" />
+                            <Button Grid.Column="2"
+                                    Content="삭제"
+                                    Command="{Binding ClearEntryBackImageCommand}"
+                                    Margin="8,4,0,0"
+                                    Style="{StaticResource SecondaryButtonStyle}" />
+                        </Grid>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="그림 가로(mm)" Style="{StaticResource FieldLabelStyle}" />
+                                <TextBox Text="{Binding SelectedEntry.BackImageWidthMm, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:0.##}}" />
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="그림 세로(mm)" Style="{StaticResource FieldLabelStyle}" />
+                                <TextBox Text="{Binding SelectedEntry.BackImageHeightMm, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:0.##}}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="그림 X(mm)" Style="{StaticResource FieldLabelStyle}" />
+                                <TextBox Text="{Binding SelectedEntry.BackImageX, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:0.##}}" />
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="그림 Y(mm)" Style="{StaticResource FieldLabelStyle}" />
+                                <TextBox Text="{Binding SelectedEntry.BackImageY, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:0.##}}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <TextBlock Text="뒷면 그림 회전" Style="{StaticResource FieldLabelStyle}" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="58" />
+                            </Grid.ColumnDefinitions>
+                            <Slider Minimum="0" Maximum="359"
+                                    TickFrequency="1"
+                                    IsSnapToTickEnabled="True"
+                                    Value="{Binding SelectedEntry.BackImageRotation, UpdateSourceTrigger=PropertyChanged}"
+                                    VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding SelectedEntry.BackImageRotation, StringFormat={}{0:0}°}"
+                                       HorizontalAlignment="Right"
+                                       VerticalAlignment="Center"
+                                       FontWeight="SemiBold" />
+                        </Grid>
+                        <UniformGrid Columns="3" Margin="0,4,0,0">
+                            <Button Content="작게" Command="{Binding ScaleBackImageCommand}" CommandParameter="0.9" Style="{StaticResource SecondaryButtonStyle}" />
+                            <Button Content="크게" Command="{Binding ScaleBackImageCommand}" CommandParameter="1.1" Margin="8,4,0,0" Style="{StaticResource SecondaryButtonStyle}" />
+                            <Button Content="원본 전체" Command="{Binding FitBackImageCommand}" Margin="8,4,0,0" Style="{StaticResource SecondaryButtonStyle}" />
+                            <Button Content="↶ 90°" Command="{Binding RotateBackImageCommand}" CommandParameter="-90" Style="{StaticResource SecondaryButtonStyle}" />
+                            <Button Content="회전 초기화" Command="{Binding ResetBackImageRotationCommand}" Margin="8,4,0,0" Style="{StaticResource SecondaryButtonStyle}" />
+                            <Button Content="↷ 90°" Command="{Binding RotateBackImageCommand}" CommandParameter="90" Margin="8,4,0,0" Style="{StaticResource SecondaryButtonStyle}" />
+                        </UniformGrid>
+
+                        <CheckBox Content="모서리 드래그 시 그림 비율 유지"
+                                  IsChecked="{Binding LockImageAspectRatio}"
+                                  Margin="0,10,0,0"
+                                  FontWeight="SemiBold" />
 
                         <TextBlock Text="글꼴" Style="{StaticResource FieldLabelStyle}" />
                         <ComboBox ItemsSource="{Binding FontFamilies}"
@@ -223,7 +445,7 @@
                             </StackPanel>
                         </Grid>
 
-                        <TextBlock Text="색상" Style="{StaticResource SectionTitleStyle}" />
+                        <TextBlock Text="앞면 색상" Style="{StaticResource SectionTitleStyle}" />
                         <TextBlock Text="글자 색상" Style="{StaticResource FieldLabelStyle}" />
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -258,6 +480,55 @@
                             <Rectangle Grid.Column="0" Margin="0,4,8,4" RadiusX="3" RadiusY="3" Fill="{Binding BorderBrush}" Stroke="#CBD5E1" />
                             <TextBox Grid.Column="1" Text="{Binding BorderColor, Mode=OneWay}" IsReadOnly="True" />
                             <Button Grid.Column="2" Content="선택" Command="{Binding SelectBorderColorCommand}" Style="{StaticResource ColorSelectButtonStyle}" />
+                        </Grid>
+
+                        <TextBlock Text="뒷면 색상" Style="{StaticResource SectionTitleStyle}" />
+                        <TextBlock Text="뒷면 글자 색상" Style="{StaticResource FieldLabelStyle}" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="34" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="72" />
+                            </Grid.ColumnDefinitions>
+                            <Rectangle Grid.Column="0" Margin="0,4,8,4" RadiusX="3" RadiusY="3" Fill="{Binding BackFontBrush}" Stroke="#CBD5E1" />
+                            <TextBox Grid.Column="1" Text="{Binding BackFontColor, Mode=OneWay}" IsReadOnly="True" />
+                            <Button Grid.Column="2" Content="선택" Command="{Binding SelectBackFontColorCommand}" Style="{StaticResource ColorSelectButtonStyle}" />
+                        </Grid>
+
+                        <Grid Margin="0,9,0,4">
+                            <TextBlock Text="뒷면 배경색"
+                                       VerticalAlignment="Center"
+                                       FontSize="13"
+                                       FontWeight="SemiBold"
+                                       Foreground="#334155" />
+                            <CheckBox Content="그림 색상 자동"
+                                      IsChecked="{Binding MatchBackBackgroundToImage}"
+                                      HorizontalAlignment="Right"
+                                      Margin="0"
+                                      FontWeight="SemiBold"
+                                      ToolTip="선택한 뒷면 그림의 특징적인 색상을 배경색으로 자동 적용" />
+                        </Grid>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="34" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="72" />
+                            </Grid.ColumnDefinitions>
+                            <Rectangle Grid.Column="0" Margin="0,4,8,4" RadiusX="3" RadiusY="3" Fill="{Binding BackBackgroundBrush}" Stroke="#CBD5E1" />
+                            <TextBox Grid.Column="1" Text="{Binding BackBackgroundColor, Mode=OneWay}" IsReadOnly="True" />
+                            <Button Grid.Column="2" Content="선택" Command="{Binding SelectBackBackgroundColorCommand}" Style="{StaticResource ColorSelectButtonStyle}" />
+                        </Grid>
+
+                        <TextBlock Text="뒷면 테두리 색상" Style="{StaticResource FieldLabelStyle}" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="34" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="72" />
+                            </Grid.ColumnDefinitions>
+                            <Rectangle Grid.Column="0" Margin="0,4,8,4" RadiusX="3" RadiusY="3" Fill="{Binding BackBorderBrush}" Stroke="#CBD5E1" />
+                            <TextBox Grid.Column="1" Text="{Binding BackBorderColor, Mode=OneWay}" IsReadOnly="True" />
+                            <Button Grid.Column="2" Content="선택" Command="{Binding SelectBackBorderColorCommand}" Style="{StaticResource ColorSelectButtonStyle}" />
                         </Grid>
 
                         <TextBlock Text="스타일과 위치" Style="{StaticResource SectionTitleStyle}" />
@@ -455,6 +726,19 @@
                         </StackPanel>
 
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,6">
+                                <Button Content="이전 페이지" Command="{Binding PreviousPreviewPageCommand}"
+                                        Padding="10,4" Style="{StaticResource SecondaryButtonStyle}" />
+                                <TextBlock Text="{Binding PreviewPageText}" Margin="10,0" VerticalAlignment="Center" />
+                                <Button Content="다음 페이지" Command="{Binding NextPreviewPageCommand}"
+                                        Padding="10,4" Style="{StaticResource SecondaryButtonStyle}" />
+                            </StackPanel>
+                            <CheckBox Content="뒷면 미리보기"
+                                      IsChecked="{Binding IsPreviewingBack}"
+                                      IsEnabled="{Binding IsDoubleSided}"
+                                      Visibility="Collapsed"
+                                      HorizontalAlignment="Right"
+                                      Margin="0,0,0,6" />
                             <DockPanel LastChildFill="True">
                                 <TextBlock Text="확대/축소"
                                            DockPanel.Dock="Left"
@@ -482,8 +766,12 @@
                         BorderBrush="#CBD5E1"
                         BorderThickness="1">
                     <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                                  VerticalScrollBarVisibility="Auto">
+                                  VerticalScrollBarVisibility="Auto"
+                                  PreviewMouseWheel="PaperPreview_MouseWheel">
                         <Grid MinWidth="760" MinHeight="560">
+                          <StackPanel Orientation="Horizontal"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center">
                             <Canvas Width="{Binding EffectivePaperWidthPixels}"
                                     Height="{Binding EffectivePaperHeightPixels}"
                                     HorizontalAlignment="Center"
@@ -525,6 +813,9 @@
                                         <DataTemplate>
                                             <Grid Width="{Binding WidthPixels}"
                                                   Height="{Binding HeightPixels}"
+                                                  ClipToBounds="True">
+                                              <Grid Width="{Binding WidthPixels}"
+                                                  Height="{Binding HeightPixels}"
                                                   Background="{Binding DataContext.BackgroundBrush, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                   ClipToBounds="True">
                                                 <Image Source="{Binding Entry.BackgroundImagePath, Converter={StaticResource ImagePathToImageSourceConverter}}"
@@ -554,13 +845,58 @@
                                                           Opacity="0.75"
                                                           Visibility="{Binding DataContext.HasDecorationLine, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
-                                                    <Image Source="{Binding Entry.OverlayImagePath, Converter={StaticResource ImagePathToImageSourceConverter}}"
-                                                           Canvas.Left="{Binding DataContext.OverlayImageXPixels, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                           Canvas.Top="{Binding DataContext.OverlayImageYPixels, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                           Width="{Binding DataContext.OverlayImageWidthPixels, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                           Height="{Binding DataContext.OverlayImageHeightPixels, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                           Stretch="Uniform"
-                                                           IsHitTestVisible="False" />
+                                                    <Grid Canvas.Left="{Binding DataContext.OverlayImageXPixels, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                          Canvas.Top="{Binding DataContext.OverlayImageYPixels, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                          Width="{Binding DataContext.OverlayImageWidthPixels, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                          Height="{Binding DataContext.OverlayImageHeightPixels, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                          Visibility="{Binding Entry.OverlayImagePath, Converter={StaticResource StringNotEmptyToVisibilityConverter}}"
+                                                          Background="Transparent"
+                                                          Tag="FrontOverlay"
+                                                          Cursor="SizeAll"
+                                                          RenderTransformOrigin="0.5,0.5"
+                                                          MouseLeftButtonDown="PreviewImage_MouseLeftButtonDown"
+                                                          MouseMove="PreviewImage_MouseMove"
+                                                          MouseLeftButtonUp="PreviewImage_MouseLeftButtonUp"
+                                                          MouseWheel="PreviewImage_MouseWheel">
+                                                        <Grid.ContextMenu>
+                                                            <ContextMenu>
+                                                                <MenuItem Header="꽉 차게" Tag="Fill" Click="PreviewImageContextMenu_Click" />
+                                                                <MenuItem Header="좌회전" Tag="RotateLeft" Click="PreviewImageContextMenu_Click" />
+                                                                <MenuItem Header="우회전" Tag="RotateRight" Click="PreviewImageContextMenu_Click" />
+                                                            </ContextMenu>
+                                                        </Grid.ContextMenu>
+                                                        <Grid.RenderTransform>
+                                                            <RotateTransform Angle="{Binding DataContext.OverlayImageRotation, RelativeSource={RelativeSource AncestorType=ItemsControl}}" />
+                                                        </Grid.RenderTransform>
+                                                        <Image Source="{Binding Entry.OverlayImagePath, Converter={StaticResource ImagePathToImageSourceConverter}}"
+                                                               Stretch="UniformToFill"
+                                                               IsHitTestVisible="False" />
+                                                        <Border BorderBrush="#2563EB"
+                                                                BorderThickness="1"
+                                                                Background="#11000000"
+                                                                IsHitTestVisible="False" />
+                                                        <primitives:Thumb Style="{StaticResource PreviewResizeThumbStyle}"
+                                                                          HorizontalAlignment="Left"
+                                                                          VerticalAlignment="Top"
+                                                                          Cursor="SizeNWSE"
+                                                                          Tag="TopLeft" />
+                                                        <primitives:Thumb Style="{StaticResource PreviewResizeThumbStyle}"
+                                                                          HorizontalAlignment="Right"
+                                                                          VerticalAlignment="Top"
+                                                                          Cursor="SizeNESW"
+                                                                          Tag="TopRight" />
+                                                        <primitives:Thumb Style="{StaticResource PreviewResizeThumbStyle}"
+                                                                          HorizontalAlignment="Left"
+                                                                          VerticalAlignment="Bottom"
+                                                                          Cursor="SizeNESW"
+                                                                          Tag="BottomLeft" />
+                                                        <primitives:Thumb Style="{StaticResource PreviewResizeThumbStyle}"
+                                                                          HorizontalAlignment="Right"
+                                                                          VerticalAlignment="Bottom"
+                                                                          Cursor="SizeNWSE"
+                                                                          Tag="BottomRight" />
+                                                        <primitives:Thumb Style="{StaticResource PreviewRotateThumbStyle}" />
+                                                    </Grid>
 
                                                     <TextBlock x:Name="CopyCompanyTextBlock"
                                                                Text="{Binding Entry.CompanyText}"
@@ -646,11 +982,153 @@
                                                            StrokeThickness="1"
                                                            StrokeDashArray="5,3"
                                                            IsHitTestVisible="False" />
+                                              </Grid>
+
                                             </Grid>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
                             </Canvas>
+
+                            <Canvas Width="{Binding EffectivePaperWidthPixels}"
+                                    Height="{Binding EffectivePaperHeightPixels}"
+                                    Margin="18,0,0,0"
+                                    Background="#FFFFFF"
+                                    Visibility="{Binding IsDoubleSided, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <Canvas.LayoutTransform>
+                                    <ScaleTransform ScaleX="{Binding Zoom}" ScaleY="{Binding Zoom}" />
+                                </Canvas.LayoutTransform>
+
+                                <Rectangle Width="{Binding EffectivePaperWidthPixels}"
+                                           Height="{Binding EffectivePaperHeightPixels}"
+                                           Fill="#FFFFFF"
+                                           Stroke="#EF4444"
+                                           StrokeThickness="3" />
+                                <Rectangle Canvas.Left="{Binding PageMarginPixels}"
+                                           Canvas.Top="{Binding PageMarginPixels}"
+                                           Width="{Binding PrintableAreaWidthPixels}"
+                                           Height="{Binding PrintableAreaHeightPixels}"
+                                           Stroke="#FCA5A5"
+                                           StrokeThickness="1"
+                                           StrokeDashArray="4,4" />
+
+                                <TextBlock Text="뒷면"
+                                           Canvas.Left="12" Canvas.Top="8"
+                                           FontSize="18" FontWeight="Bold"
+                                           Foreground="#DC2626" />
+
+                                <ItemsControl Width="{Binding EffectivePaperWidthPixels}"
+                                              Height="{Binding EffectivePaperHeightPixels}"
+                                              ItemsSource="{Binding PreviewPlacements}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemContainerStyle>
+                                        <Style TargetType="ContentPresenter">
+                                            <Setter Property="Canvas.Left" Value="{Binding LeftPixels}" />
+                                            <Setter Property="Canvas.Top" Value="{Binding TopPixels}" />
+                                        </Style>
+                                    </ItemsControl.ItemContainerStyle>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Width="{Binding WidthPixels}"
+                                                  Height="{Binding HeightPixels}"
+                                                  Background="{Binding DataContext.BackBackgroundBrush, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                  ClipToBounds="True">
+                                                <Canvas Width="{Binding WidthPixels}"
+                                                        Height="{Binding HeightPixels}"
+                                                        Panel.ZIndex="0"
+                                                        ClipToBounds="True">
+                                                    <Grid Canvas.Left="{Binding Entry.BackImageX, Converter={StaticResource MillimetersToPixelsConverter}, ConverterParameter=Signed}"
+                                                          Canvas.Top="{Binding Entry.BackImageY, Converter={StaticResource MillimetersToPixelsConverter}, ConverterParameter=Signed}"
+                                                          Width="{Binding Entry.BackImageWidthMm, Converter={StaticResource MillimetersToPixelsConverter}}"
+                                                          Height="{Binding Entry.BackImageHeightMm, Converter={StaticResource MillimetersToPixelsConverter}}"
+                                                          Visibility="{Binding Entry.BackImagePath, Converter={StaticResource StringNotEmptyToVisibilityConverter}}"
+                                                          Background="Transparent"
+                                                          Tag="BackImage"
+                                                          Cursor="SizeAll"
+                                                          RenderTransformOrigin="0.5,0.5"
+                                                          MouseLeftButtonDown="PreviewImage_MouseLeftButtonDown"
+                                                          MouseMove="PreviewImage_MouseMove"
+                                                          MouseLeftButtonUp="PreviewImage_MouseLeftButtonUp"
+                                                          MouseWheel="PreviewImage_MouseWheel">
+                                                        <Grid.ContextMenu>
+                                                            <ContextMenu>
+                                                                <MenuItem Header="꽉 차게" Tag="Fill" Click="PreviewImageContextMenu_Click" />
+                                                                <MenuItem Header="좌회전" Tag="RotateLeft" Click="PreviewImageContextMenu_Click" />
+                                                                <MenuItem Header="우회전" Tag="RotateRight" Click="PreviewImageContextMenu_Click" />
+                                                            </ContextMenu>
+                                                        </Grid.ContextMenu>
+                                                        <Grid.RenderTransform>
+                                                            <RotateTransform Angle="{Binding Entry.BackImageRotation}" />
+                                                        </Grid.RenderTransform>
+                                                        <Image Source="{Binding Entry.BackImagePath, Converter={StaticResource ImagePathToImageSourceConverter}}"
+                                                               Stretch="Uniform"
+                                                               IsHitTestVisible="False" />
+                                                        <Border BorderBrush="#2563EB"
+                                                                BorderThickness="1"
+                                                                Background="#11000000"
+                                                                IsHitTestVisible="False" />
+                                                        <primitives:Thumb Style="{StaticResource PreviewResizeThumbStyle}"
+                                                                          HorizontalAlignment="Left"
+                                                                          VerticalAlignment="Top"
+                                                                          Cursor="SizeNWSE"
+                                                                          Tag="TopLeft" />
+                                                        <primitives:Thumb Style="{StaticResource PreviewResizeThumbStyle}"
+                                                                          HorizontalAlignment="Right"
+                                                                          VerticalAlignment="Top"
+                                                                          Cursor="SizeNESW"
+                                                                          Tag="TopRight" />
+                                                        <primitives:Thumb Style="{StaticResource PreviewResizeThumbStyle}"
+                                                                          HorizontalAlignment="Left"
+                                                                          VerticalAlignment="Bottom"
+                                                                          Cursor="SizeNESW"
+                                                                          Tag="BottomLeft" />
+                                                        <primitives:Thumb Style="{StaticResource PreviewResizeThumbStyle}"
+                                                                          HorizontalAlignment="Right"
+                                                                          VerticalAlignment="Bottom"
+                                                                          Cursor="SizeNWSE"
+                                                                          Tag="BottomRight" />
+                                                        <primitives:Thumb Style="{StaticResource PreviewRotateThumbStyle}" />
+                                                    </Grid>
+                                                </Canvas>
+                                                <Border BorderBrush="{Binding DataContext.BackBorderBrush, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        Panel.ZIndex="1"
+                                                        BorderThickness="{Binding DataContext.PreviewBorderThickness, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        Padding="22">
+                                                    <TextBlock Text="{Binding Entry.BackContent}"
+                                                               FontFamily="{Binding DataContext.SelectedFontFamily, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                               FontSize="{Binding DataContext.BackFontSize, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                               Foreground="{Binding DataContext.BackFontBrush, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                               TextAlignment="Center"
+                                                               TextWrapping="Wrap"
+                                                               VerticalAlignment="Center" />
+                                                </Border>
+                                                <ItemsControl ItemsSource="{Binding Entry.BackTableCells}"
+                                                              Visibility="Collapsed"
+                                                              VerticalAlignment="Bottom"
+                                                              Margin="18">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <UniformGrid Rows="{Binding DataContext.Entry.BackTableRows, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                         Columns="{Binding DataContext.Entry.BackTableColumns, RelativeSource={RelativeSource AncestorType=ItemsControl}}" />
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Border BorderBrush="#475569" BorderThickness="0.5" Padding="3">
+                                                                <TextBlock Text="{Binding}" TextAlignment="Center" TextWrapping="Wrap" />
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <Rectangle Stroke="#475569" Panel.ZIndex="2" StrokeThickness="1" StrokeDashArray="5,3" IsHitTestVisible="False" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Canvas>
+                          </StackPanel>
                         </Grid>
                     </ScrollViewer>
                 </Border>

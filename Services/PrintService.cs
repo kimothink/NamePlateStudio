@@ -1,6 +1,7 @@
 using System.Printing;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Markup;
 using System.Windows.Media;
@@ -37,6 +38,10 @@ public sealed class PrintService
             var dialog = new PrintDialog();
             dialog.PrintTicket.PageMediaSize = new PageMediaSize(layout.PageWidthPixels, layout.PageHeightPixels);
             dialog.PrintTicket.PageOrientation = design.IsLandscape ? PageOrientation.Landscape : PageOrientation.Portrait;
+            if (design.IsDoubleSided)
+            {
+                dialog.PrintTicket.Duplexing = Duplexing.TwoSidedLongEdge;
+            }
 
             if (dialog.ShowDialog() != true)
             {
@@ -46,6 +51,12 @@ public sealed class PrintService
 
             var document = CreateFixedDocument(design, layout);
             dialog.PrintDocument(document.DocumentPaginator, "NamePlateStudio 명패");
+
+            if (design.IsDoubleSided)
+            {
+                message = $"양면 {layout.PageCount}장(인쇄면 {layout.PageCount * 2}페이지), 총 {layout.Placements.Count}개 명찰을 인쇄 작업으로 보냈습니다.";
+                return true;
+            }
 
             message = $"{layout.PageCount}페이지, 총 {layout.Placements.Count}명 명패를 인쇄 작업으로 보냈습니다.";
             return true;
@@ -86,7 +97,7 @@ public sealed class PrintService
             {
                 content.Children.Add(new TextBlock
                 {
-                    Text = $"{pageIndex + 1} / {layout.PageCount} 페이지",
+                    Text = $"{pageIndex + 1} / {layout.PageCount} 앞면",
                     Margin = new Thickness(0, pageIndex == 0 ? 0 : 22, 0, 8),
                     FontWeight = FontWeights.SemiBold,
                     Foreground = Brushes.White
@@ -96,8 +107,25 @@ public sealed class PrintService
                 {
                     Stretch = Stretch.Uniform,
                     StretchDirection = StretchDirection.DownOnly,
-                    Child = CreatePaperPage(design, layout, pageIndex, showPaperGuide: true)
+                    Child = CreatePaperPage(design, layout, pageIndex, showPaperGuide: true, isBackSide: false)
                 });
+
+                if (design.IsDoubleSided)
+                {
+                    content.Children.Add(new TextBlock
+                    {
+                        Text = $"{pageIndex + 1} / {layout.PageCount} 뒷면",
+                        Margin = new Thickness(0, 12, 0, 8),
+                        FontWeight = FontWeights.SemiBold,
+                        Foreground = Brushes.White
+                    });
+                    content.Children.Add(new Viewbox
+                    {
+                        Stretch = Stretch.Uniform,
+                        StretchDirection = StretchDirection.DownOnly,
+                        Child = CreatePaperPage(design, layout, pageIndex, showPaperGuide: true, isBackSide: true)
+                    });
+                }
             }
         }
 
@@ -162,7 +190,7 @@ public sealed class PrintService
                 Background = Brushes.White
             };
 
-            AddPlacedNamePlates(page.Children, design, layout, pageIndex);
+            AddPlacedNamePlates(page.Children, design, layout, pageIndex, isBackSide: false);
 
             page.Measure(new Size(layout.PageWidthPixels, layout.PageHeightPixels));
             page.Arrange(new Rect(new Size(layout.PageWidthPixels, layout.PageHeightPixels)));
@@ -171,12 +199,30 @@ public sealed class PrintService
             var pageContent = new PageContent();
             ((IAddChild)pageContent).AddChild(page);
             fixedDocument.Pages.Add(pageContent);
+
+            if (design.IsDoubleSided)
+            {
+                var backPage = new FixedPage
+                {
+                    Width = layout.PageWidthPixels,
+                    Height = layout.PageHeightPixels,
+                    Background = Brushes.White
+                };
+                AddPlacedNamePlates(backPage.Children, design, layout, pageIndex, isBackSide: true);
+                backPage.Measure(new Size(layout.PageWidthPixels, layout.PageHeightPixels));
+                backPage.Arrange(new Rect(new Size(layout.PageWidthPixels, layout.PageHeightPixels)));
+                backPage.UpdateLayout();
+
+                var backPageContent = new PageContent();
+                ((IAddChild)backPageContent).AddChild(backPage);
+                fixedDocument.Pages.Add(backPageContent);
+            }
         }
 
         return fixedDocument;
     }
 
-    private static Canvas CreatePaperPage(NamePlateDesign design, PrintLayout layout, int pageIndex, bool showPaperGuide)
+    private static Canvas CreatePaperPage(NamePlateDesign design, PrintLayout layout, int pageIndex, bool showPaperGuide, bool isBackSide)
     {
         var page = new Canvas
         {
@@ -207,15 +253,17 @@ public sealed class PrintService
             Canvas.SetTop(page.Children[^1], layout.MarginPixels);
         }
 
-        AddPlacedNamePlates(page.Children, design, layout, pageIndex);
+        AddPlacedNamePlates(page.Children, design, layout, pageIndex, isBackSide);
         return page;
     }
 
-    private static void AddPlacedNamePlates(UIElementCollection pageChildren, NamePlateDesign design, PrintLayout layout, int pageIndex)
+    private static void AddPlacedNamePlates(UIElementCollection pageChildren, NamePlateDesign design, PrintLayout layout, int pageIndex, bool isBackSide)
     {
         foreach (var placement in layout.Placements.Where(item => item.PageIndex == pageIndex))
         {
-            var plate = CreateNamePlateElement(design, placement.Entry, showOutputGuide: true);
+            var plate = isBackSide
+                ? CreateBackNamePlateElement(design, placement.Entry, showOutputGuide: true)
+                : CreateNamePlateElement(design, placement.Entry, showOutputGuide: true);
             Canvas.SetLeft(plate, placement.LeftPixels);
             Canvas.SetTop(plate, placement.TopPixels);
             pageChildren.Add(plate);
@@ -294,6 +342,83 @@ public sealed class PrintService
         return root;
     }
 
+    public static FrameworkElement CreateBackNamePlateElement(NamePlateDesign design, NamePlateEntry entry, bool showOutputGuide)
+    {
+        var plateWidth = UnitConverter.MillimetersToPixels(design.WidthMm);
+        var plateHeight = UnitConverter.MillimetersToPixels(design.HeightMm);
+        var root = new Canvas
+        {
+            Width = plateWidth,
+            Height = plateHeight,
+            Background = ColorHelper.ToBrush(design.BackBackgroundColor, Brushes.White),
+            ClipToBounds = true
+        };
+
+        var backImage = ImageHelper.CreateImageSource(entry.BackImagePath);
+        var contentPanel = CreateBackContentPanel(design, entry);
+
+        var contentBorder = new Border
+        {
+            Width = plateWidth,
+            Height = plateHeight,
+            BorderBrush = ColorHelper.ToBrush(design.BackBorderColor, Brushes.Black),
+            BorderThickness = new Thickness(Math.Max(0, design.BorderThickness)),
+            Padding = new Thickness(UnitConverter.MillimetersToPixels(6)),
+            Child = contentPanel
+        };
+        Canvas.SetZIndex(contentBorder, 1);
+        root.Children.Add(contentBorder);
+
+        if (backImage is not null)
+        {
+            var image = new Image
+            {
+                Source = backImage,
+                Width = UnitConverter.MillimetersToPixels(Math.Max(1, entry.BackImageWidthMm)),
+                Height = UnitConverter.MillimetersToPixels(Math.Max(1, entry.BackImageHeightMm)),
+                Stretch = Stretch.Uniform,
+                RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
+                RenderTransform = new RotateTransform(entry.BackImageRotation)
+            };
+            root.Children.Add(image);
+            Canvas.SetZIndex(image, 0);
+            Canvas.SetLeft(image, UnitConverter.MillimetersToPixels(entry.BackImageX));
+            Canvas.SetTop(image, UnitConverter.MillimetersToPixels(entry.BackImageY));
+        }
+
+        if (showOutputGuide)
+        {
+            var outputGuide = new Rectangle
+            {
+                Width = plateWidth,
+                Height = plateHeight,
+                Stroke = new SolidColorBrush(Color.FromRgb(107, 114, 128)),
+                StrokeThickness = 1,
+                StrokeDashArray = new DoubleCollection { 5, 3 },
+                IsHitTestVisible = false
+            };
+            root.Children.Add(outputGuide);
+            Canvas.SetZIndex(outputGuide, 2);
+        }
+
+        return root;
+    }
+
+    private static StackPanel CreateBackContentPanel(NamePlateDesign design, NamePlateEntry entry)
+    {
+        var panel = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        if (!string.IsNullOrWhiteSpace(entry.BackContent))
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text = entry.BackContent, FontFamily = new FontFamily(design.FontFamily),
+                FontSize = Math.Max(8, design.BackFontSize), Foreground = ColorHelper.ToBrush(design.BackFontColor, Brushes.Black),
+                TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8)
+            });
+        }
+        return panel;
+    }
+
     private static void AddDecorationLines(Canvas canvas, double plateWidth, double plateHeight, Brush stroke)
     {
         var startX = plateWidth * 0.08;
@@ -327,12 +452,14 @@ public sealed class PrintService
             Source = imageSource,
             Width = UnitConverter.MillimetersToPixels(design.OverlayImageWidth),
             Height = UnitConverter.MillimetersToPixels(design.OverlayImageHeight),
-            Stretch = Stretch.Uniform,
+            Stretch = Stretch.UniformToFill,
+            RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
+            RenderTransform = new RotateTransform(design.OverlayImageRotation),
             IsHitTestVisible = false
         };
 
-        Canvas.SetLeft(image, UnitConverter.MillimetersToPixels(Math.Max(0, design.OverlayImageX)));
-        Canvas.SetTop(image, UnitConverter.MillimetersToPixels(Math.Max(0, design.OverlayImageY)));
+        Canvas.SetLeft(image, UnitConverter.MillimetersToPixels(design.OverlayImageX));
+        Canvas.SetTop(image, UnitConverter.MillimetersToPixels(design.OverlayImageY));
         canvas.Children.Add(image);
     }
 

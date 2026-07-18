@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.Input;
 using NamePlateStudio.Helpers;
 using NamePlateStudio.Models;
 using NamePlateStudio.Services;
+using NamePlateStudio.Views;
 using Brush = System.Windows.Media.Brush;
 using Brushes = System.Windows.Media.Brushes;
 using FontStyle = System.Windows.FontStyle;
@@ -23,6 +24,7 @@ public partial class MainViewModel : ObservableObject
     private readonly ColorDialogService colorDialogService = new();
     private readonly ImageFileService imageFileService = new();
     private readonly PrintLayoutService layoutService = new();
+    private bool isSynchronizingImages;
 
     public MainViewModel()
     {
@@ -82,7 +84,22 @@ public partial class MainViewModel : ObservableObject
     private string backgroundColor = "#FFFFFF";
 
     [ObservableProperty]
+    private bool matchFrontBackgroundToImage;
+
+    [ObservableProperty]
     private string borderColor = "#1F2937";
+
+    [ObservableProperty]
+    private string backFontColor = "#111827";
+
+    [ObservableProperty]
+    private string backBackgroundColor = "#FFFFFF";
+
+    [ObservableProperty]
+    private string backBorderColor = "#1F2937";
+
+    [ObservableProperty]
+    private bool matchBackBackgroundToImage;
 
     [ObservableProperty]
     private double borderThickness = 2;
@@ -121,6 +138,18 @@ public partial class MainViewModel : ObservableObject
     private double overlayImageHeight = 18;
 
     [ObservableProperty]
+    private double overlayImageRotation;
+
+    [ObservableProperty]
+    private bool applyFrontImagesToAllEntries;
+
+    [ObservableProperty]
+    private bool applyBackImagesToAllEntries;
+
+    [ObservableProperty]
+    private bool lockImageAspectRatio = true;
+
+    [ObservableProperty]
     private PaperSizeOption? selectedPaperSize;
 
     [ObservableProperty]
@@ -131,6 +160,24 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     private bool isLandscape;
+
+    [ObservableProperty]
+    private bool isDoubleSided;
+
+    [ObservableProperty]
+    private double backFontSize = 20;
+
+    [ObservableProperty]
+    private string bulkBackContent = string.Empty;
+
+    [ObservableProperty]
+    private int previewPageIndex;
+
+    [ObservableProperty]
+    private int previewPageCount = 1;
+
+    [ObservableProperty]
+    private bool isPreviewingBack;
 
     [ObservableProperty]
     private double pageMarginMm = 5;
@@ -191,9 +238,9 @@ public partial class MainViewModel : ObservableObject
 
     public double DecorationBottomLineY => PreviewHeightPixels * 0.76;
 
-    public double OverlayImageXPixels => UnitConverter.MillimetersToPixels(Math.Max(0, OverlayImageX));
+    public double OverlayImageXPixels => UnitConverter.MillimetersToPixels(OverlayImageX);
 
-    public double OverlayImageYPixels => UnitConverter.MillimetersToPixels(Math.Max(0, OverlayImageY));
+    public double OverlayImageYPixels => UnitConverter.MillimetersToPixels(OverlayImageY);
 
     public double OverlayImageWidthPixels => UnitConverter.MillimetersToPixels(Math.Max(0, OverlayImageWidth));
 
@@ -207,11 +254,21 @@ public partial class MainViewModel : ObservableObject
 
     public string ZoomPercentText => $"{Zoom * 100:0}%";
 
+    public string PreviewPageText => $"{PreviewPageIndex + 1} / {Math.Max(1, PreviewPageCount)} 페이지";
+
+    public bool IsFrontPreview => !IsPreviewingBack;
+
     public Brush FontBrush => ColorHelper.ToBrush(FontColor, Brushes.Black);
 
     public Brush BackgroundBrush => ColorHelper.ToBrush(BackgroundColor, Brushes.White);
 
     public Brush BorderBrush => ColorHelper.ToBrush(BorderColor, Brushes.Black);
+
+    public Brush BackFontBrush => ColorHelper.ToBrush(BackFontColor, Brushes.Black);
+
+    public Brush BackBackgroundBrush => ColorHelper.ToBrush(BackBackgroundColor, Brushes.White);
+
+    public Brush BackBorderBrush => ColorHelper.ToBrush(BackBorderColor, Brushes.Black);
 
     public Thickness PreviewBorderThickness => new(Math.Max(0, BorderThickness));
 
@@ -240,6 +297,46 @@ public partial class MainViewModel : ObservableObject
         Entries.Remove(SelectedEntry);
         SelectedEntry = Entries.FirstOrDefault();
         StatusMessage = "선택한 항목을 삭제했습니다.";
+    }
+
+    [RelayCommand]
+    private void ApplyBackContentToAll()
+    {
+        if (Entries.Count == 0)
+        {
+            ShowNotice("일괄 적용할 명찰 항목이 없습니다.");
+            return;
+        }
+
+        foreach (var entry in Entries)
+        {
+            entry.BackContent = BulkBackContent ?? string.Empty;
+        }
+
+        IsDoubleSided = true;
+        StatusMessage = $"뒷면 내용을 {Entries.Count}개 명찰에 일괄 적용했습니다.";
+    }
+
+    [RelayCommand]
+    private void OpenBackEditor(object? parameter)
+    {
+        if (parameter is not NamePlateEntry entry)
+        {
+            return;
+        }
+
+        var editor = new BackEditorWindow(entry, Entries)
+        {
+            Owner = System.Windows.Application.Current.MainWindow
+        };
+        if (editor.ShowDialog() == true)
+        {
+            IsDoubleSided = true;
+            RefreshPreviewProperties();
+            StatusMessage = editor.AppliedToAll
+                ? "뒷면 편집 내용을 모든 명찰에 적용했습니다."
+                : $"{entry.NameText} 명찰의 뒷면 내용을 저장했습니다.";
+        }
     }
 
     [RelayCommand]
@@ -278,6 +375,159 @@ public partial class MainViewModel : ObservableObject
 
         SelectedEntry.OverlayImagePath = string.Empty;
         StatusMessage = "선택한 항목의 이미지/로고를 제거했습니다.";
+    }
+
+    [RelayCommand]
+    private void ScaleFrontImage(string? factorText)
+    {
+        if (!TryReadScaleFactor(factorText, out var factor))
+        {
+            return;
+        }
+
+        ScaleFrontImagePlacement(factor);
+        StatusMessage = $"앞면 그림 크기를 {factor * 100:0}%로 조절했습니다.";
+    }
+
+    [RelayCommand]
+    private void RotateFrontImage(string? degreesText)
+    {
+        if (!TryReadDegrees(degreesText, out var degrees))
+        {
+            return;
+        }
+
+        OverlayImageRotation = NormalizeDegrees(OverlayImageRotation + degrees);
+        StatusMessage = $"앞면 그림을 {Math.Abs(degrees):0}도 {(degrees < 0 ? "왼쪽" : "오른쪽")}으로 회전했습니다.";
+    }
+
+    [RelayCommand]
+    private void ResetFrontImageRotation()
+    {
+        OverlayImageRotation = 0;
+        StatusMessage = "앞면 그림 회전을 초기화했습니다.";
+    }
+
+    [RelayCommand]
+    private void FitFrontImage()
+    {
+        OverlayImageX = 0;
+        OverlayImageY = 0;
+        OverlayImageWidth = Math.Max(1, WidthMm);
+        OverlayImageHeight = Math.Max(1, HeightMm);
+        StatusMessage = "앞면 그림을 명찰 크기에 맞췄습니다.";
+    }
+
+    [RelayCommand]
+    private void SelectEntryBackImage()
+    {
+        if (SelectedEntry is null)
+        {
+            ShowNotice("뒷면 이미지를 넣을 명찰을 먼저 선택해주세요.");
+            return;
+        }
+
+        var path = imageFileService.PickImage();
+        if (path is null)
+        {
+            StatusMessage = "뒷면 이미지 선택을 취소했습니다.";
+            return;
+        }
+
+        SelectedEntry.BackImagePath = path;
+        FitBackImageToOriginal(SelectedEntry);
+        if (MatchBackBackgroundToImage)
+        {
+            ApplyBackBackgroundFromImage();
+        }
+        IsDoubleSided = true;
+        StatusMessage = "뒷면 이미지를 원본 전체가 보이는 크기로 넣었습니다.";
+    }
+
+    [RelayCommand]
+    private void ClearEntryBackImage()
+    {
+        if (SelectedEntry is null)
+        {
+            ShowNotice("뒷면 이미지를 삭제할 명찰을 먼저 선택해주세요.");
+            return;
+        }
+
+        SelectedEntry.BackImagePath = string.Empty;
+        StatusMessage = "선택한 명찰의 뒷면 이미지를 삭제했습니다.";
+    }
+
+    [RelayCommand]
+    private void ScaleBackImage(string? factorText)
+    {
+        if (SelectedEntry is null || !TryReadScaleFactor(factorText, out var factor))
+        {
+            return;
+        }
+
+        ScaleBackImagePlacement(SelectedEntry, factor);
+        StatusMessage = $"뒷면 그림 크기를 {factor * 100:0}%로 조절했습니다.";
+    }
+
+    [RelayCommand]
+    private void RotateBackImage(string? degreesText)
+    {
+        if (SelectedEntry is null || !TryReadDegrees(degreesText, out var degrees))
+        {
+            return;
+        }
+
+        SelectedEntry.BackImageRotation = NormalizeDegrees(SelectedEntry.BackImageRotation + degrees);
+        FitBackImageToOriginal(SelectedEntry);
+        StatusMessage = $"뒷면 그림을 {Math.Abs(degrees):0}도 {(degrees < 0 ? "왼쪽" : "오른쪽")}으로 회전했습니다.";
+    }
+
+    [RelayCommand]
+    private void ResetBackImageRotation()
+    {
+        if (SelectedEntry is null)
+        {
+            return;
+        }
+
+        SelectedEntry.BackImageRotation = 0;
+        FitBackImageToOriginal(SelectedEntry);
+        StatusMessage = "뒷면 그림 회전을 초기화했습니다.";
+    }
+
+    [RelayCommand]
+    private void FitBackImage()
+    {
+        if (SelectedEntry is null)
+        {
+            return;
+        }
+
+        if (!FitBackImageToOriginal(SelectedEntry))
+        {
+            StatusMessage = "원본 크기를 맞출 뒷면 그림을 먼저 선택해주세요.";
+            return;
+        }
+
+        StatusMessage = "뒷면 그림의 원본 전체가 보이도록 크기와 위치를 맞췄습니다.";
+    }
+
+    [RelayCommand]
+    private void PreviousPreviewPage()
+    {
+        if (PreviewPageIndex > 0)
+        {
+            PreviewPageIndex--;
+        }
+    }
+
+    [RelayCommand]
+    private void NextPreviewPage()
+    {
+        if (PreviewPageIndex + 1 < PreviewPageCount)
+        {
+            PreviewPageIndex++;
+        }
     }
 
     [RelayCommand]
@@ -374,13 +624,39 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void SelectBackgroundColor()
     {
-        PickColor("배경", BackgroundColor, selectedColor => BackgroundColor = selectedColor);
+        PickColor("배경", BackgroundColor, selectedColor =>
+        {
+            MatchFrontBackgroundToImage = false;
+            BackgroundColor = selectedColor;
+        });
     }
 
     [RelayCommand]
     private void SelectBorderColor()
     {
         PickColor("테두리", BorderColor, selectedColor => BorderColor = selectedColor);
+    }
+
+    [RelayCommand]
+    private void SelectBackFontColor()
+    {
+        PickColor("뒷면 글자", BackFontColor, selectedColor => BackFontColor = selectedColor);
+    }
+
+    [RelayCommand]
+    private void SelectBackBackgroundColor()
+    {
+        PickColor("뒷면 배경", BackBackgroundColor, selectedColor =>
+        {
+            MatchBackBackgroundToImage = false;
+            BackBackgroundColor = selectedColor;
+        });
+    }
+
+    [RelayCommand]
+    private void SelectBackBorderColor()
+    {
+        PickColor("뒷면 테두리", BackBorderColor, selectedColor => BackBorderColor = selectedColor);
     }
 
     partial void OnWidthMmChanged(double value)
@@ -404,6 +680,41 @@ public partial class MainViewModel : ObservableObject
     partial void OnBackgroundColorChanged(string value) => RefreshPreviewProperties();
 
     partial void OnBorderColorChanged(string value) => RefreshPreviewProperties();
+
+    partial void OnMatchFrontBackgroundToImageChanged(bool value)
+    {
+        if (value)
+        {
+            ApplyFrontBackgroundFromImage();
+        }
+    }
+
+    partial void OnBackFontColorChanged(string value) => RefreshPreviewProperties();
+
+    partial void OnBackBackgroundColorChanged(string value) => RefreshPreviewProperties();
+
+    partial void OnBackBorderColorChanged(string value) => RefreshPreviewProperties();
+
+    partial void OnMatchBackBackgroundToImageChanged(bool value)
+    {
+        if (value)
+        {
+            ApplyBackBackgroundFromImage();
+        }
+    }
+
+    partial void OnSelectedEntryChanged(NamePlateEntry? value)
+    {
+        if (MatchBackBackgroundToImage && value is not null && !string.IsNullOrWhiteSpace(value.BackImagePath))
+        {
+            ApplyBackBackgroundFromImage();
+        }
+
+        if (MatchFrontBackgroundToImage && value is not null)
+        {
+            ApplyFrontBackgroundFromImage();
+        }
+    }
 
     partial void OnBorderThicknessChanged(double value) => RefreshPreviewProperties();
 
@@ -429,6 +740,30 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnOverlayImageHeightChanged(double value) => RefreshPreviewProperties();
 
+    partial void OnOverlayImageRotationChanged(double value) => RefreshPreviewProperties();
+
+    partial void OnApplyFrontImagesToAllEntriesChanged(bool value)
+    {
+        if (!value || SelectedEntry is null || Entries.Count == 0)
+        {
+            return;
+        }
+
+        SynchronizeFrontImagesFrom(SelectedEntry);
+        StatusMessage = $"현재 앞면 그림 설정을 {Entries.Count}개 명찰에 적용했습니다.";
+    }
+
+    partial void OnApplyBackImagesToAllEntriesChanged(bool value)
+    {
+        if (!value || SelectedEntry is null || Entries.Count == 0)
+        {
+            return;
+        }
+
+        SynchronizeBackImagesFrom(SelectedEntry);
+        StatusMessage = $"현재 뒷면 그림 설정을 {Entries.Count}개 명찰에 적용했습니다.";
+    }
+
     partial void OnSelectedPaperSizeChanged(PaperSizeOption? value)
     {
         if (value is { IsCustom: false })
@@ -445,6 +780,31 @@ public partial class MainViewModel : ObservableObject
     partial void OnPaperHeightMmChanged(double value) => RefreshPreviewProperties();
 
     partial void OnIsLandscapeChanged(bool value) => RefreshPreviewProperties();
+
+    partial void OnIsDoubleSidedChanged(bool value)
+    {
+        if (!value)
+        {
+            IsPreviewingBack = false;
+        }
+        RefreshPreviewProperties();
+    }
+
+    partial void OnBackFontSizeChanged(double value) => RefreshPreviewProperties();
+
+    partial void OnPreviewPageIndexChanged(int value)
+    {
+        OnPropertyChanged(nameof(PreviewPageText));
+        RebuildPreviewPlacements();
+    }
+
+    partial void OnPreviewPageCountChanged(int value) => OnPropertyChanged(nameof(PreviewPageText));
+
+    partial void OnIsPreviewingBackChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsFrontPreview));
+        RefreshPreviewProperties();
+    }
 
     partial void OnPageMarginMmChanged(double value) => RefreshPreviewProperties();
 
@@ -498,15 +858,22 @@ public partial class MainViewModel : ObservableObject
             return false;
         }
 
+        if (entries.Any(entry => !string.IsNullOrWhiteSpace(entry.BackImagePath)
+            && (entry.BackImageWidthMm <= 0 || entry.BackImageHeightMm <= 0)))
+        {
+            ShowNotice("뒷면 그림의 가로/세로 크기는 0보다 커야 합니다.");
+            return false;
+        }
+
         if (PageMarginMm < 0 || HorizontalGapMm < 0 || VerticalGapMm < 0)
         {
             ShowNotice("여백과 간격은 0 이상이어야 합니다.");
             return false;
         }
 
-        if (OverlayImageX < 0 || OverlayImageY < 0 || OverlayImageWidth < 0 || OverlayImageHeight < 0)
+        if (OverlayImageWidth <= 0 || OverlayImageHeight <= 0)
         {
-            ShowNotice("이미지 위치와 크기는 0 이상이어야 합니다.");
+            ShowNotice("이미지 가로/세로 크기는 0보다 커야 합니다.");
             return false;
         }
 
@@ -525,6 +892,14 @@ public partial class MainViewModel : ObservableObject
         if (!ColorHelper.TryCreateBrush(BorderColor, out _))
         {
             ShowNotice("테두리 색상을 다시 선택해주세요.");
+            return false;
+        }
+
+        if (!ColorHelper.TryCreateBrush(BackFontColor, out _) ||
+            !ColorHelper.TryCreateBrush(BackBackgroundColor, out _) ||
+            !ColorHelper.TryCreateBrush(BackBorderColor, out _))
+        {
+            ShowNotice("뒷면 색상을 다시 선택해주세요.");
             return false;
         }
 
@@ -556,7 +931,12 @@ public partial class MainViewModel : ObservableObject
             FontSize = FontSize,
             FontColor = FontColor,
             BackgroundColor = BackgroundColor,
+            MatchFrontBackgroundToImage = MatchFrontBackgroundToImage,
             BorderColor = BorderColor,
+            BackFontColor = BackFontColor,
+            BackBackgroundColor = BackBackgroundColor,
+            BackBorderColor = BackBorderColor,
+            MatchBackBackgroundToImage = MatchBackBackgroundToImage,
             BorderThickness = BorderThickness,
             PositionX = PositionX,
             PositionY = PositionY,
@@ -569,10 +949,16 @@ public partial class MainViewModel : ObservableObject
             OverlayImageY = OverlayImageY,
             OverlayImageWidth = OverlayImageWidth,
             OverlayImageHeight = OverlayImageHeight,
+            OverlayImageRotation = OverlayImageRotation,
+            ApplyFrontImagesToAllEntries = ApplyFrontImagesToAllEntries,
+            ApplyBackImagesToAllEntries = ApplyBackImagesToAllEntries,
+            LockImageAspectRatio = LockImageAspectRatio,
             PaperSizeName = SelectedPaperSize?.Name ?? "사용자 지정",
             PaperWidthMm = PaperWidthMm,
             PaperHeightMm = PaperHeightMm,
             IsLandscape = IsLandscape,
+            IsDoubleSided = IsDoubleSided,
+            BackFontSize = BackFontSize,
             CopyCount = Math.Max(1, entries.Count),
             PageMarginMm = PageMarginMm,
             HorizontalGapMm = HorizontalGapMm,
@@ -588,7 +974,11 @@ public partial class MainViewModel : ObservableObject
         FontSize = design.FontSize <= 0 ? 42 : design.FontSize;
         FontColor = string.IsNullOrWhiteSpace(design.FontColor) ? "#111827" : design.FontColor;
         BackgroundColor = string.IsNullOrWhiteSpace(design.BackgroundColor) ? "#FFFFFF" : design.BackgroundColor;
+        MatchFrontBackgroundToImage = design.MatchFrontBackgroundToImage;
         BorderColor = string.IsNullOrWhiteSpace(design.BorderColor) ? "#1F2937" : design.BorderColor;
+        BackFontColor = string.IsNullOrWhiteSpace(design.BackFontColor) ? "#111827" : design.BackFontColor;
+        BackBackgroundColor = string.IsNullOrWhiteSpace(design.BackBackgroundColor) ? "#FFFFFF" : design.BackBackgroundColor;
+        BackBorderColor = string.IsNullOrWhiteSpace(design.BackBorderColor) ? "#1F2937" : design.BackBorderColor;
         BorderThickness = Math.Max(0, design.BorderThickness);
         PositionX = design.PositionX;
         PositionY = design.PositionY;
@@ -597,15 +987,20 @@ public partial class MainViewModel : ObservableObject
         HorizontalTextAlignment = NormalizeHorizontalAlignment(design.HorizontalTextAlignment);
         VerticalTextAlignment = NormalizeVerticalAlignment(design.VerticalTextAlignment);
         HasDecorationLine = design.HasDecorationLine;
-        OverlayImageX = Math.Max(0, design.OverlayImageX);
-        OverlayImageY = Math.Max(0, design.OverlayImageY);
+        OverlayImageX = design.OverlayImageX;
+        OverlayImageY = design.OverlayImageY;
         OverlayImageWidth = design.OverlayImageWidth <= 0 ? 18 : design.OverlayImageWidth;
         OverlayImageHeight = design.OverlayImageHeight <= 0 ? 18 : design.OverlayImageHeight;
+        OverlayImageRotation = NormalizeDegrees(design.OverlayImageRotation);
+        LockImageAspectRatio = design.LockImageAspectRatio;
 
         var entries = design.Entries is { Count: > 0 }
             ? design.Entries
             : [new NamePlateEntry(design.NameText, design.TitleText, design.CompanyText)];
         ApplyEntries(entries);
+        ApplyFrontImagesToAllEntries = design.ApplyFrontImagesToAllEntries;
+        ApplyBackImagesToAllEntries = design.ApplyBackImagesToAllEntries;
+        MatchBackBackgroundToImage = design.MatchBackBackgroundToImage;
 
         var paperOption = PaperSizes.FirstOrDefault(option => option.Name == design.PaperSizeName)
             ?? PaperSizes.First(option => option.IsCustom);
@@ -613,6 +1008,8 @@ public partial class MainViewModel : ObservableObject
         PaperWidthMm = design.PaperWidthMm <= 0 ? paperOption.WidthMm : design.PaperWidthMm;
         PaperHeightMm = design.PaperHeightMm <= 0 ? paperOption.HeightMm : design.PaperHeightMm;
         IsLandscape = design.IsLandscape;
+        IsDoubleSided = design.IsDoubleSided;
+        BackFontSize = design.BackFontSize <= 0 ? 20 : design.BackFontSize;
         PageMarginMm = Math.Max(0, design.PageMarginMm);
         HorizontalGapMm = Math.Max(0, design.HorizontalGapMm);
         VerticalGapMm = Math.Max(0, design.VerticalGapMm);
@@ -635,7 +1032,17 @@ public partial class MainViewModel : ObservableObject
                 entry.TitleText ?? string.Empty,
                 entry.CompanyText ?? string.Empty,
                 entry.BackgroundImagePath ?? string.Empty,
-                entry.OverlayImagePath ?? string.Empty);
+                entry.OverlayImagePath ?? string.Empty,
+                entry.BackContent ?? string.Empty,
+                entry.BackImagePath ?? string.Empty,
+                entry.BackImageWidthMm,
+                entry.BackImageHeightMm,
+                entry.BackTableRows,
+                entry.BackTableColumns,
+                entry.BackTableCells,
+                entry.BackImageX,
+                entry.BackImageY,
+                entry.BackImageRotation);
             Entries.Add(cleanEntry);
         }
 
@@ -657,6 +1064,17 @@ public partial class MainViewModel : ObservableObject
             foreach (NamePlateEntry entry in e.NewItems)
             {
                 entry.PropertyChanged += EntryPropertyChanged;
+                if (SelectedEntry is not null && !ReferenceEquals(entry, SelectedEntry))
+                {
+                    if (ApplyFrontImagesToAllEntries)
+                    {
+                        CopyFrontImages(SelectedEntry, entry);
+                    }
+                    if (ApplyBackImagesToAllEntries)
+                    {
+                        CopyBackImages(SelectedEntry, entry);
+                    }
+                }
             }
         }
 
@@ -665,7 +1083,106 @@ public partial class MainViewModel : ObservableObject
 
     private void EntryPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (!isSynchronizingImages && sender is NamePlateEntry changedEntry &&
+            ReferenceEquals(changedEntry, SelectedEntry))
+        {
+            if (ApplyFrontImagesToAllEntries && IsFrontImageProperty(e.PropertyName))
+            {
+                SynchronizeFrontImagesFrom(changedEntry);
+            }
+            else if (ApplyBackImagesToAllEntries && IsBackImageProperty(e.PropertyName))
+            {
+                SynchronizeBackImagesFrom(changedEntry);
+            }
+        }
+
+        if (sender is NamePlateEntry entry && IsBackSideProperty(e.PropertyName) && HasBackSideContent(entry))
+        {
+            IsDoubleSided = true;
+        }
+
         RefreshPreviewProperties();
+    }
+
+    private static bool IsBackSideProperty(string? propertyName)
+    {
+        return propertyName is nameof(NamePlateEntry.BackContent)
+            or nameof(NamePlateEntry.BackImagePath)
+            or nameof(NamePlateEntry.BackImageX)
+            or nameof(NamePlateEntry.BackImageY)
+            or nameof(NamePlateEntry.BackImageWidthMm)
+            or nameof(NamePlateEntry.BackImageHeightMm)
+            or nameof(NamePlateEntry.BackImageRotation);
+    }
+
+    private static bool HasBackSideContent(NamePlateEntry entry)
+    {
+        return !string.IsNullOrWhiteSpace(entry.BackContent)
+            || !string.IsNullOrWhiteSpace(entry.BackImagePath);
+    }
+
+    private static bool IsFrontImageProperty(string? propertyName)
+    {
+        return propertyName is nameof(NamePlateEntry.BackgroundImagePath)
+            or nameof(NamePlateEntry.OverlayImagePath);
+    }
+
+    private static bool IsBackImageProperty(string? propertyName)
+    {
+        return propertyName is nameof(NamePlateEntry.BackImagePath)
+            or nameof(NamePlateEntry.BackImageX)
+            or nameof(NamePlateEntry.BackImageY)
+            or nameof(NamePlateEntry.BackImageWidthMm)
+            or nameof(NamePlateEntry.BackImageHeightMm)
+            or nameof(NamePlateEntry.BackImageRotation);
+    }
+
+    private void SynchronizeFrontImagesFrom(NamePlateEntry source)
+    {
+        isSynchronizingImages = true;
+        try
+        {
+            foreach (var entry in Entries.Where(entry => !ReferenceEquals(entry, source)))
+            {
+                CopyFrontImages(source, entry);
+            }
+        }
+        finally
+        {
+            isSynchronizingImages = false;
+        }
+    }
+
+    private void SynchronizeBackImagesFrom(NamePlateEntry source)
+    {
+        isSynchronizingImages = true;
+        try
+        {
+            foreach (var entry in Entries.Where(entry => !ReferenceEquals(entry, source)))
+            {
+                CopyBackImages(source, entry);
+            }
+        }
+        finally
+        {
+            isSynchronizingImages = false;
+        }
+    }
+
+    private static void CopyFrontImages(NamePlateEntry source, NamePlateEntry target)
+    {
+        target.BackgroundImagePath = source.BackgroundImagePath;
+        target.OverlayImagePath = source.OverlayImagePath;
+    }
+
+    private static void CopyBackImages(NamePlateEntry source, NamePlateEntry target)
+    {
+        target.BackImagePath = source.BackImagePath;
+        target.BackImageX = source.BackImageX;
+        target.BackImageY = source.BackImageY;
+        target.BackImageWidthMm = source.BackImageWidthMm;
+        target.BackImageHeightMm = source.BackImageHeightMm;
+        target.BackImageRotation = source.BackImageRotation;
     }
 
     private void RefreshPreviewProperties()
@@ -699,6 +1216,9 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(FontBrush));
         OnPropertyChanged(nameof(BackgroundBrush));
         OnPropertyChanged(nameof(BorderBrush));
+        OnPropertyChanged(nameof(BackFontBrush));
+        OnPropertyChanged(nameof(BackBackgroundBrush));
+        OnPropertyChanged(nameof(BackBorderBrush));
         OnPropertyChanged(nameof(PreviewBorderThickness));
         OnPropertyChanged(nameof(NameFontWeight));
         OnPropertyChanged(nameof(NameFontStyle));
@@ -712,12 +1232,25 @@ public partial class MainViewModel : ObservableObject
         var entryCount = GetPrintableEntries(trimText: false).Count;
         if (entryCount == 0)
         {
+            PreviewPageCount = 1;
+            if (PreviewPageIndex != 0)
+            {
+                PreviewPageIndex = 0;
+                return;
+            }
             LayoutSummaryText = "명패 내용 목록에 표시명을 입력해주세요.";
             return;
         }
 
         var layout = layoutService.CreateLayout(CreateDesignSnapshot());
-        foreach (var placement in layout.Placements.Where(item => item.PageIndex == 0))
+        PreviewPageCount = Math.Max(1, layout.PageCount);
+        if (PreviewPageIndex >= PreviewPageCount)
+        {
+            PreviewPageIndex = PreviewPageCount - 1;
+            return;
+        }
+
+        foreach (var placement in layout.Placements.Where(item => item.PageIndex == PreviewPageIndex))
         {
             PreviewPlacements.Add(placement);
         }
@@ -741,7 +1274,17 @@ public partial class MainViewModel : ObservableObject
                     trimText ? title.Trim() : title,
                     trimText ? company.Trim() : company,
                     entry.BackgroundImagePath ?? string.Empty,
-                    entry.OverlayImagePath ?? string.Empty);
+                    entry.OverlayImagePath ?? string.Empty,
+                    trimText ? (entry.BackContent ?? string.Empty).Trim() : entry.BackContent ?? string.Empty,
+                    entry.BackImagePath ?? string.Empty,
+                    entry.BackImageWidthMm,
+                    entry.BackImageHeightMm,
+                    entry.BackTableRows,
+                    entry.BackTableColumns,
+                    entry.BackTableCells,
+                    entry.BackImageX,
+                    entry.BackImageY,
+                    entry.BackImageRotation);
             })
             .Where(entry => !string.IsNullOrWhiteSpace(entry.NameText))
             .ToList();
@@ -778,6 +1321,129 @@ public partial class MainViewModel : ObservableObject
         return Math.Round(Math.Max(0, sizeMm) / 2.0, 2);
     }
 
+    private static double NormalizeDegrees(double degrees)
+    {
+        var normalized = degrees % 360;
+        return normalized < 0 ? normalized + 360 : normalized;
+    }
+
+    private static bool TryReadDegrees(string? text, out double degrees)
+        => double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out degrees);
+
+    private static bool TryReadScaleFactor(string? text, out double factor)
+        => double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out factor)
+            && factor > 0;
+
+    private void ScaleFrontImagePlacement(double factor)
+    {
+        var width = Math.Max(1, OverlayImageWidth * factor);
+        var height = Math.Max(1, OverlayImageHeight * factor);
+        var centerX = OverlayImageX + OverlayImageWidth / 2;
+        var centerY = OverlayImageY + OverlayImageHeight / 2;
+        var boundedFactor = Math.Min(1,
+            Math.Min(Math.Max(1, WidthMm) / width, Math.Max(1, HeightMm) / height));
+        if (width > WidthMm || height > HeightMm)
+        {
+            width *= boundedFactor;
+            height *= boundedFactor;
+        }
+
+        OverlayImageWidth = width;
+        OverlayImageHeight = height;
+        OverlayImageX = Math.Clamp(centerX - width / 2, 0, Math.Max(0, WidthMm - width));
+        OverlayImageY = Math.Clamp(centerY - height / 2, 0, Math.Max(0, HeightMm - height));
+    }
+
+    private void ScaleBackImagePlacement(NamePlateEntry entry, double factor)
+    {
+        var width = Math.Max(1, entry.BackImageWidthMm * factor);
+        var height = Math.Max(1, entry.BackImageHeightMm * factor);
+        var centerX = entry.BackImageX + entry.BackImageWidthMm / 2;
+        var centerY = entry.BackImageY + entry.BackImageHeightMm / 2;
+        var boundedFactor = Math.Min(1,
+            Math.Min(Math.Max(1, WidthMm) / width, Math.Max(1, HeightMm) / height));
+        if (width > WidthMm || height > HeightMm)
+        {
+            width *= boundedFactor;
+            height *= boundedFactor;
+        }
+
+        entry.BackImageWidthMm = width;
+        entry.BackImageHeightMm = height;
+        entry.BackImageX = Math.Clamp(centerX - width / 2, 0, Math.Max(0, WidthMm - width));
+        entry.BackImageY = Math.Clamp(centerY - height / 2, 0, Math.Max(0, HeightMm - height));
+    }
+
+    private bool FitBackImageToOriginal(NamePlateEntry entry)
+    {
+        var imageSource = ImageHelper.CreateImageSource(entry.BackImagePath);
+        if (imageSource is null || imageSource.Width <= 0 || imageSource.Height <= 0 || WidthMm <= 0 || HeightMm <= 0)
+        {
+            return false;
+        }
+
+        var radians = entry.BackImageRotation * Math.PI / 180.0;
+        var absoluteCos = Math.Abs(Math.Cos(radians));
+        var absoluteSin = Math.Abs(Math.Sin(radians));
+        var rotatedSourceWidth = imageSource.Width * absoluteCos + imageSource.Height * absoluteSin;
+        var rotatedSourceHeight = imageSource.Width * absoluteSin + imageSource.Height * absoluteCos;
+        var scale = Math.Min(WidthMm / rotatedSourceWidth, HeightMm / rotatedSourceHeight);
+        if (!double.IsFinite(scale) || scale <= 0)
+        {
+            return false;
+        }
+
+        var width = imageSource.Width * scale;
+        var height = imageSource.Height * scale;
+        entry.BackImageWidthMm = Math.Round(width, 2);
+        entry.BackImageHeightMm = Math.Round(height, 2);
+        entry.BackImageX = Math.Round((WidthMm - width) / 2, 2);
+        entry.BackImageY = Math.Round((HeightMm - height) / 2, 2);
+        return true;
+    }
+
+    private void ApplyBackBackgroundFromImage()
+    {
+        if (SelectedEntry is null || string.IsNullOrWhiteSpace(SelectedEntry.BackImagePath))
+        {
+            StatusMessage = "배경색을 맞출 뒷면 그림을 먼저 선택해주세요.";
+            return;
+        }
+
+        if (!ImageColorHelper.TryGetRepresentativeColor(SelectedEntry.BackImagePath, out var colorHex))
+        {
+            StatusMessage = "뒷면 그림에서 배경색을 추출하지 못했습니다.";
+            return;
+        }
+
+        BackBackgroundColor = colorHex;
+        StatusMessage = $"뒷면 배경색을 그림의 대표 색상 {colorHex}(으)로 적용했습니다.";
+    }
+
+    private void ApplyFrontBackgroundFromImage()
+    {
+        var imagePath = SelectedEntry?.BackgroundImagePath;
+        if (string.IsNullOrWhiteSpace(imagePath))
+        {
+            imagePath = SelectedEntry?.OverlayImagePath;
+        }
+
+        if (string.IsNullOrWhiteSpace(imagePath))
+        {
+            StatusMessage = "앞면 배경색을 맞출 이미지를 먼저 선택해주세요.";
+            return;
+        }
+
+        if (!ImageColorHelper.TryGetRepresentativeColor(imagePath, out var colorHex))
+        {
+            StatusMessage = "앞면 이미지에서 배경색을 추출하지 못했습니다.";
+            return;
+        }
+
+        BackgroundColor = colorHex;
+        StatusMessage = $"앞면 배경색을 이미지와 어울리는 색상 {colorHex}로 적용했습니다.";
+    }
+
     private void SetSelectedEntryImage(bool isBackground)
     {
         if (SelectedEntry is null)
@@ -796,11 +1462,19 @@ public partial class MainViewModel : ObservableObject
         if (isBackground)
         {
             SelectedEntry.BackgroundImagePath = path;
+            if (MatchFrontBackgroundToImage)
+            {
+                ApplyFrontBackgroundFromImage();
+            }
             StatusMessage = "선택한 항목의 배경 이미지를 변경했습니다.";
         }
         else
         {
             SelectedEntry.OverlayImagePath = path;
+            if (MatchFrontBackgroundToImage)
+            {
+                ApplyFrontBackgroundFromImage();
+            }
             StatusMessage = "선택한 항목의 이미지/로고를 변경했습니다.";
         }
     }

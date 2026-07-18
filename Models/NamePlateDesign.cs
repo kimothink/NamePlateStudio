@@ -31,7 +31,17 @@ public sealed class NamePlateDesign
 
     public string BackgroundColor { get; set; } = "#FFFFFF";
 
+    public bool MatchFrontBackgroundToImage { get; set; }
+
     public string BorderColor { get; set; } = "#1F2937";
+
+    public string BackFontColor { get; set; } = "#111827";
+
+    public string BackBackgroundColor { get; set; } = "#FFFFFF";
+
+    public string BackBorderColor { get; set; } = "#1F2937";
+
+    public bool MatchBackBackgroundToImage { get; set; }
 
     public double BorderThickness { get; set; } = 2;
 
@@ -57,6 +67,14 @@ public sealed class NamePlateDesign
 
     public double OverlayImageHeight { get; set; } = 18;
 
+    public double OverlayImageRotation { get; set; }
+
+    public bool ApplyFrontImagesToAllEntries { get; set; }
+
+    public bool ApplyBackImagesToAllEntries { get; set; }
+
+    public bool LockImageAspectRatio { get; set; } = true;
+
     public string PaperSizeName { get; set; } = "A4";
 
     public double PaperWidthMm { get; set; } = 210;
@@ -64,6 +82,10 @@ public sealed class NamePlateDesign
     public double PaperHeightMm { get; set; } = 297;
 
     public bool IsLandscape { get; set; }
+
+    public bool IsDoubleSided { get; set; }
+
+    public double BackFontSize { get; set; } = 20;
 
     public int CopyCount { get; set; } = 3;
 

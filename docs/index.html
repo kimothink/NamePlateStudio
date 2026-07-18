@@ -3,18 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>NamePlateStudio</title>
+  <title>NamePlateStudio 다운로드</title>
   <style>
     :root {
       color-scheme: light;
-      --ink: #111827;
-      --muted: #4b5563;
+      --ink: #121826;
+      --muted: #526173;
       --line: #d7dee8;
       --blue: #1d4ed8;
       --teal: #0f766e;
-      --amber: #f59e0b;
-      --paper: #f6f8fb;
+      --paper: #f5f7fb;
       --panel: #ffffff;
+      --soft: #eaf1fb;
     }
 
     * {
@@ -33,52 +33,51 @@
       color: inherit;
     }
 
-    .page {
-      min-height: 100vh;
-    }
-
-    .hero {
-      background: linear-gradient(135deg, #f8fafc 0%, #dbeafe 52%, #ccfbf1 100%);
-      border-bottom: 1px solid var(--line);
-    }
-
     .wrap {
       width: min(1120px, calc(100% - 40px));
       margin: 0 auto;
     }
 
-    .hero-inner {
+    header {
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(245, 247, 251, 0.96)),
+        url("assets/NamePlateStudio.png") right 10% center / 260px 260px no-repeat,
+        var(--soft);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .hero {
+      min-height: 520px;
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 360px;
-      gap: 56px;
+      grid-template-columns: minmax(0, 1fr) 390px;
+      gap: 48px;
       align-items: center;
-      padding: 72px 0 56px;
+      padding: 58px 0 42px;
     }
 
     .brand {
       display: inline-flex;
       align-items: center;
       gap: 12px;
-      margin-bottom: 22px;
-      font-weight: 700;
-      color: #0f172a;
+      margin-bottom: 20px;
+      font-weight: 800;
     }
 
     .brand img {
       width: 44px;
       height: 44px;
-      border-radius: 10px;
+      border-radius: 8px;
     }
 
     h1 {
       margin: 0;
-      font-size: clamp(42px, 7vw, 76px);
+      font-size: clamp(42px, 7vw, 74px);
       line-height: 1;
       letter-spacing: 0;
     }
 
     .lead {
-      max-width: 680px;
+      max-width: 720px;
       margin: 24px 0 0;
       color: var(--muted);
       font-size: 19px;
@@ -95,11 +94,11 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-height: 46px;
-      padding: 0 18px;
+      min-height: 48px;
+      padding: 0 20px;
       border-radius: 8px;
       text-decoration: none;
-      font-weight: 700;
+      font-weight: 800;
       border: 1px solid transparent;
     }
 
@@ -110,29 +109,29 @@
 
     .button.secondary {
       background: #ffffff;
-      color: var(--ink);
       border-color: var(--line);
     }
 
     .preview {
-      background: rgba(255, 255, 255, 0.75);
+      background: rgba(255, 255, 255, 0.86);
       border: 1px solid var(--line);
       border-radius: 8px;
-      padding: 24px;
-      box-shadow: 0 16px 36px rgba(17, 24, 39, 0.12);
+      padding: 22px;
+      box-shadow: 0 16px 36px rgba(18, 24, 38, 0.12);
     }
 
     .paper {
       aspect-ratio: 210 / 297;
       background: #ffffff;
       border: 1px solid #cbd5e1;
-      padding: 26px 18px;
+      padding: 22px 16px;
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 12px;
+      gap: 10px;
     }
 
     .plate {
+      min-height: 72px;
       border: 2px solid #1f2937;
       display: grid;
       align-items: center;
@@ -141,13 +140,14 @@
       text-align: center;
       background: #ffffff;
       position: relative;
+      overflow: hidden;
     }
 
     .plate::before,
     .plate::after {
       content: "";
       width: 82%;
-      border-top: 1px solid #6b7280;
+      border-top: 1px solid #64748b;
       position: absolute;
       left: 9%;
     }
@@ -161,11 +161,12 @@
     }
 
     .plate strong {
-      font-size: 22px;
+      font-size: 21px;
+      line-height: 1.2;
     }
 
     main {
-      padding: 46px 0 64px;
+      padding: 44px 0 64px;
     }
 
     .grid {
@@ -174,48 +175,55 @@
       gap: 16px;
     }
 
-    .card {
+    .card,
+    .download {
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: 8px;
       padding: 22px;
     }
 
+    h2,
+    h3 {
+      margin: 0 0 10px;
+      line-height: 1.25;
+    }
+
     h2 {
-      margin: 0 0 14px;
       font-size: 24px;
     }
 
     h3 {
-      margin: 0 0 10px;
       font-size: 18px;
     }
 
     p {
       margin: 0;
+      color: var(--muted);
     }
 
     ul {
       margin: 0;
       padding-left: 20px;
+      color: var(--muted);
     }
 
     .download {
       margin-top: 24px;
-      padding: 22px;
-      background: #ffffff;
-      border: 1px solid var(--line);
       border-left: 5px solid var(--teal);
-      border-radius: 8px;
+    }
+
+    .meta {
+      display: grid;
+      gap: 7px;
+      margin-top: 16px;
+      color: var(--muted);
+      font-size: 14px;
     }
 
     .hash {
-      display: block;
-      margin-top: 10px;
-      color: var(--muted);
       word-break: break-all;
-      font-family: Consolas, monospace;
-      font-size: 13px;
+      font-family: Consolas, "Courier New", monospace;
     }
 
     footer {
@@ -226,9 +234,16 @@
     }
 
     @media (max-width: 860px) {
-      .hero-inner {
+      header {
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(245, 247, 251, 0.98)),
+          url("assets/NamePlateStudio.png") right 18px top 24px / 130px 130px no-repeat,
+          var(--soft);
+      }
+
+      .hero {
         grid-template-columns: 1fr;
-        padding-top: 44px;
+        padding-top: 46px;
       }
 
       .preview {
@@ -242,60 +257,66 @@
   </style>
 </head>
 <body>
-  <div class="page">
-    <header class="hero">
-      <div class="wrap hero-inner">
-        <section>
-          <div class="brand">
-            <img src="assets/NamePlateStudio.png" alt="NamePlateStudio icon">
-            <span>NamePlateStudio</span>
-          </div>
-          <h1>NamePlateStudio</h1>
-          <p class="lead">명패 안쪽에 넣을 이름표를 직접 꾸미고, A4 용지 한 장에 여러 개를 실제 mm 크기로 배치해 인쇄하는 Windows 프로그램입니다.</p>
-          <div class="actions">
-            <a class="button primary" href="https://github.com/kimothink/NamePlateStudio/releases/download/v1.0.0/NamePlateStudio-Setup-1.0.0-win-x64.exe">설치 파일 다운로드</a>
-            <a class="button secondary" href="https://github.com/kimothink/NamePlateStudio">GitHub 저장소</a>
-          </div>
-        </section>
-        <aside class="preview" aria-label="A4 preview">
-          <div class="paper">
-            <div class="plate"><strong>고요한</strong></div>
-            <div class="plate"><strong>신일수</strong></div>
-            <div class="plate"><strong>이청룡</strong></div>
-            <div class="plate"><strong>홍길동</strong></div>
-            <div class="plate"><strong>참석자</strong></div>
-            <div class="plate"><strong>게스트</strong></div>
-          </div>
-        </aside>
+  <header>
+    <div class="wrap hero">
+      <section>
+        <div class="brand">
+          <img src="assets/NamePlateStudio.png" alt="NamePlateStudio 아이콘">
+          <span>NamePlateStudio</span>
+        </div>
+        <h1>NamePlateStudio</h1>
+        <p class="lead">아크릴 명패 안쪽에 넣을 이름표를 직접 꾸미고, 입력한 실제 mm 크기로 A4 용지에 여러 개 배치해 출력하는 Windows 프로그램입니다.</p>
+        <div class="actions">
+          <a class="button primary" href="downloads/NamePlateStudio-Setup-1.0.1-win-x64.exe">설치 파일 다운로드</a>
+          <a class="button secondary" href="https://github.com/kimothink/NamePlateStudio">GitHub 저장소</a>
+        </div>
+      </section>
+      <aside class="preview" aria-label="A4 명패 배치 미리보기">
+        <div class="paper">
+          <div class="plate"><strong>고요한</strong></div>
+          <div class="plate"><strong>신일수</strong></div>
+          <div class="plate"><strong>이청룡</strong></div>
+          <div class="plate"><strong>홍길동</strong></div>
+          <div class="plate"><strong>참석자</strong></div>
+          <div class="plate"><strong>방문객</strong></div>
+        </div>
+      </aside>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="grid" aria-label="주요 기능">
+      <article class="card">
+        <h3>실측 인쇄</h3>
+        <p>입력한 가로, 세로 mm 값을 WPF 인쇄 단위로 변환해 실제 크기에 맞춰 출력합니다.</p>
+      </article>
+      <article class="card">
+        <h3>A4 여러 개 배치</h3>
+        <p>용지 크기, 여백, 간격을 기준으로 한 장에 들어갈 명패 개수를 자동 계산하고 미리 볼 수 있습니다.</p>
+      </article>
+      <article class="card">
+        <h3>앞면과 뒷면 편집</h3>
+        <p>항목별 이름, 소속 문구, 뒷면 문구, 배경 이미지, 색상, 회전과 크기를 다르게 설정할 수 있습니다.</p>
+      </article>
+    </section>
+
+    <section class="download">
+      <h2>Windows 설치 파일</h2>
+      <p>NSIS로 만든 win-x64 self-contained 설치 파일입니다. 별도 .NET 런타임 설치 없이 실행할 수 있습니다.</p>
+      <div class="actions">
+        <a class="button primary" href="downloads/NamePlateStudio-Setup-1.0.1-win-x64.exe">NamePlateStudio 1.0.1 다운로드</a>
       </div>
-    </header>
+      <div class="meta">
+        <span>파일명: NamePlateStudio-Setup-1.0.1-win-x64.exe</span>
+        <span>크기: 49,406,912 bytes</span>
+        <span>업데이트: 2026-07-18</span>
+        <span class="hash">SHA256: 9C8510AB7EC056DEB8C7801F1374D55F9661B57022DDAB13D8A0E8EA8EF02662</span>
+      </div>
+    </section>
+  </main>
 
-    <main class="wrap">
-      <section class="grid" aria-label="features">
-        <article class="card">
-          <h3>실측 인쇄</h3>
-          <p>입력한 명패 가로/세로 mm 값을 WPF 출력 단위로 변환해 실제 크기에 맞춰 인쇄합니다.</p>
-        </article>
-        <article class="card">
-          <h3>여러 명패 배치</h3>
-          <p>A4 등 선택한 용지와 여백, 간격을 기준으로 한 장에 들어가는 개수를 자동 계산합니다.</p>
-        </article>
-        <article class="card">
-          <h3>항목별 디자인</h3>
-          <p>참석자마다 표시명, 소개 문구, 소속/메모, 배경 이미지, 로고 이미지를 다르게 설정할 수 있습니다.</p>
-        </article>
-      </section>
-
-      <section class="download">
-        <h2>Windows 설치 파일</h2>
-        <p>버전 1.0.0, win-x64 self-contained 설치 파일입니다.</p>
-        <span class="hash">SHA256: 4F57E2F1B9264044C6645989E86C9236CF8A5CC7CF30AFCD38F1AA2D024B5651</span>
-      </section>
-    </main>
-
-    <footer>
-      <div class="wrap">Copyright 2026 NamePlateStudio</div>
-    </footer>
-  </div>
+  <footer>
+    <div class="wrap">Copyright 2026 NamePlateStudio</div>
+  </footer>
 </body>
 </html>

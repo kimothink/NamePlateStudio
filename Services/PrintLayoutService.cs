@@ -110,7 +110,17 @@ public sealed class PrintLayoutService
                 (entry.TitleText ?? string.Empty).Trim(),
                 (entry.CompanyText ?? string.Empty).Trim(),
                 entry.BackgroundImagePath ?? string.Empty,
-                entry.OverlayImagePath ?? string.Empty))
+                entry.OverlayImagePath ?? string.Empty,
+                entry.BackContent ?? string.Empty,
+                entry.BackImagePath ?? string.Empty,
+                entry.BackImageWidthMm,
+                entry.BackImageHeightMm,
+                entry.BackTableRows,
+                entry.BackTableColumns,
+                entry.BackTableCells,
+                entry.BackImageX,
+                entry.BackImageY,
+                entry.BackImageRotation))
             .ToList();
 
         if (entries.Count > 0)
