@@ -8,6 +8,7 @@ using NamePlateStudio.Helpers;
 using NamePlateStudio.Models;
 using NamePlateStudio.ViewModels;
 using MessageBox = System.Windows.MessageBox;
+using WpfCursors = System.Windows.Input.Cursors;
 
 namespace NamePlateStudio.Views;
 
@@ -17,6 +18,7 @@ public partial class MainWindow : Window
     private PreviewImageDragState? previewImageDragState;
     private PreviewImageResizeState? previewImageResizeState;
     private PreviewImageRotationState? previewImageRotationState;
+    private SelectedPreviewImage? selectedPreviewImage;
 
     public MainWindow()
     {
@@ -45,6 +47,47 @@ public partial class MainWindow : Window
     private void ExitButton_Click(object sender, RoutedEventArgs e)
     {
         Close();
+    }
+
+    private void Window_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is not DependencyObject source || !IsInsidePreviewImageEditor(source))
+        {
+            selectedPreviewImage = null;
+        }
+    }
+
+    private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key != Key.Delete || selectedPreviewImage is not { } selected ||
+            Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase
+                or System.Windows.Controls.PasswordBox
+                or System.Windows.Controls.ComboBox)
+        {
+            return;
+        }
+
+        if (DataContext is not MainViewModel viewModel || !viewModel.Entries.Contains(selected.Entry))
+        {
+            selectedPreviewImage = null;
+            return;
+        }
+
+        viewModel.SelectedEntry = selected.Entry;
+        if (selected.IsBackImage)
+        {
+            viewModel.ClearEntryBackImageCommand.Execute(null);
+        }
+        else
+        {
+            viewModel.ClearEntryOverlayImageCommand.Execute(null);
+        }
+
+        previewImageDragState = null;
+        previewImageResizeState = null;
+        previewImageRotationState = null;
+        selectedPreviewImage = null;
+        e.Handled = true;
     }
 
     private void PaperPreview_MouseWheel(object sender, MouseWheelEventArgs e)
@@ -101,6 +144,7 @@ public partial class MainWindow : Window
 
         viewModel.SelectedEntry = placement.Entry;
         var isBackImage = IsBackImageElement(element);
+        selectedPreviewImage = new SelectedPreviewImage(placement.Entry, isBackImage);
         var startPoint = e.GetPosition(parentCanvas);
         previewImageDragState = new PreviewImageDragState(
             element,
@@ -161,7 +205,9 @@ public partial class MainWindow : Window
         }
 
         viewModel.SelectedEntry = placement.Entry;
-        ScalePreviewImage(viewModel, placement.Entry, IsBackImageElement(element), e.Delta > 0 ? 1.1 : 0.9);
+        var isBackImage = IsBackImageElement(element);
+        selectedPreviewImage = new SelectedPreviewImage(placement.Entry, isBackImage);
+        ScalePreviewImage(viewModel, placement.Entry, isBackImage, e.Delta > 0 ? 1.1 : 0.9);
         e.Handled = true;
     }
 
@@ -178,6 +224,7 @@ public partial class MainWindow : Window
 
         viewModel.SelectedEntry = placement.Entry;
         var isBackImage = IsBackImageElement(element);
+        selectedPreviewImage = new SelectedPreviewImage(placement.Entry, isBackImage);
         switch (menuItem.Tag?.ToString())
         {
             case "Fill":
@@ -212,17 +259,43 @@ public partial class MainWindow : Window
 
         viewModel.SelectedEntry = placement.Entry;
         var isBackImage = IsBackImageElement(editor);
+        selectedPreviewImage = new SelectedPreviewImage(placement.Entry, isBackImage);
         previewImageResizeState = new PreviewImageResizeState(
             placement.Entry,
             isBackImage,
             parentCanvas,
             Mouse.GetPosition(parentCanvas),
-            GetResizeCorner(thumb),
+            GetResizeHandle(thumb),
             isBackImage ? placement.Entry.BackImageX : viewModel.OverlayImageX,
             isBackImage ? placement.Entry.BackImageY : viewModel.OverlayImageY,
             isBackImage ? placement.Entry.BackImageWidthMm : viewModel.OverlayImageWidth,
             isBackImage ? placement.Entry.BackImageHeightMm : viewModel.OverlayImageHeight,
             isBackImage ? placement.Entry.BackImageRotation : viewModel.OverlayImageRotation);
+    }
+
+    private void PreviewImageResizeThumb_MouseEnter(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (sender is not Thumb thumb ||
+            FindImageEditor(thumb) is not { } editor ||
+            editor.DataContext is not NamePlatePlacement placement ||
+            DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        var handle = GetResizeHandle(thumb);
+        var rotation = IsBackImageElement(editor)
+            ? placement.Entry.BackImageRotation
+            : viewModel.OverlayImageRotation;
+        var localDirection = handle switch
+        {
+            ResizeHandle.Top or ResizeHandle.Bottom => 90,
+            ResizeHandle.TopLeft or ResizeHandle.BottomRight => 45,
+            ResizeHandle.TopRight or ResizeHandle.BottomLeft => -45,
+            _ => 0
+        };
+
+        thumb.Cursor = GetResizeCursor(localDirection + rotation);
     }
 
     private void PreviewImageResizeThumb_DragDelta(object sender, DragDeltaEventArgs e)
@@ -245,7 +318,7 @@ public partial class MainWindow : Window
             viewModel,
             state.Entry,
             state.IsBackImage,
-            state.Corner,
+            state.Handle,
             UnitConverter.PixelsToMillimeters(localDeltaX),
             UnitConverter.PixelsToMillimeters(localDeltaY),
             state.StartX,
@@ -282,6 +355,7 @@ public partial class MainWindow : Window
             parentCanvas);
         var pointer = Mouse.GetPosition(parentCanvas);
         var isBackImage = IsBackImageElement(editor);
+        selectedPreviewImage = new SelectedPreviewImage(placement.Entry, isBackImage);
         previewImageRotationState = new PreviewImageRotationState(
             placement.Entry,
             isBackImage,
@@ -337,7 +411,7 @@ public partial class MainWindow : Window
         MainViewModel viewModel,
         NamePlateEntry entry,
         bool isBackImage,
-        ResizeCorner corner,
+        ResizeHandle handle,
         double deltaWidthMm,
         double deltaHeightMm,
         double x,
@@ -348,49 +422,52 @@ public partial class MainWindow : Window
     {
         const double MinimumImageSizeMm = 5;
 
-        if (viewModel.LockImageAspectRatio && width > 0 && height > 0)
+        if (IsCornerHandle(handle) && width > 0 && height > 0)
         {
-            ResizePreviewImageWithLockedRatio(
-                viewModel, entry, isBackImage, corner, deltaWidthMm, deltaHeightMm,
+            ResizePreviewImageProportionally(
+                viewModel, entry, isBackImage, handle, deltaWidthMm, deltaHeightMm,
                 x, y, width, height, rotation, MinimumImageSizeMm);
             return;
         }
 
-        var right = x + width;
-        var bottom = y + height;
+        var movesLeft = handle == ResizeHandle.Left;
+        var movesRight = handle == ResizeHandle.Right;
+        var movesTop = handle == ResizeHandle.Top;
+        var movesBottom = handle == ResizeHandle.Bottom;
+        var newWidth = width;
+        var newHeight = height;
 
-        if (corner is ResizeCorner.TopLeft or ResizeCorner.BottomLeft)
+        if (movesLeft)
         {
-            var newX = Math.Min(x + deltaWidthMm, right - MinimumImageSizeMm);
-            width = right - newX;
-            x = newX;
+            newWidth = Math.Max(MinimumImageSizeMm, width - deltaWidthMm);
         }
-        else
+        else if (movesRight)
         {
-            var newRight = Math.Max(right + deltaWidthMm, x + MinimumImageSizeMm);
-            width = newRight - x;
-        }
-
-        if (corner is ResizeCorner.TopLeft or ResizeCorner.TopRight)
-        {
-            var newY = Math.Min(y + deltaHeightMm, bottom - MinimumImageSizeMm);
-            height = bottom - newY;
-            y = newY;
-        }
-        else
-        {
-            var newBottom = Math.Max(bottom + deltaHeightMm, y + MinimumImageSizeMm);
-            height = newBottom - y;
+            newWidth = Math.Max(MinimumImageSizeMm, width + deltaWidthMm);
         }
 
-        ApplyPreviewImagePlacement(viewModel, entry, isBackImage, x, y, width, height, rotation);
+        if (movesTop)
+        {
+            newHeight = Math.Max(MinimumImageSizeMm, height - deltaHeightMm);
+        }
+        else if (movesBottom)
+        {
+            newHeight = Math.Max(MinimumImageSizeMm, height + deltaHeightMm);
+        }
+
+        var anchoredPosition = GetAnchoredResizePosition(
+            x, y, width, height, newWidth, newHeight, rotation,
+            movesLeft, movesTop, movesRight, movesBottom);
+        ApplyPreviewImagePlacement(
+            viewModel, entry, isBackImage,
+            anchoredPosition.X, anchoredPosition.Y, newWidth, newHeight, rotation);
     }
 
-    private static void ResizePreviewImageWithLockedRatio(
+    private static void ResizePreviewImageProportionally(
         MainViewModel viewModel,
         NamePlateEntry entry,
         bool isBackImage,
-        ResizeCorner corner,
+        ResizeHandle handle,
         double deltaWidthMm,
         double deltaHeightMm,
         double x,
@@ -400,8 +477,8 @@ public partial class MainWindow : Window
         double rotation,
         double minimumImageSizeMm)
     {
-        var movesLeft = corner is ResizeCorner.TopLeft or ResizeCorner.BottomLeft;
-        var movesTop = corner is ResizeCorner.TopLeft or ResizeCorner.TopRight;
+        var movesLeft = handle is ResizeHandle.TopLeft or ResizeHandle.BottomLeft;
+        var movesTop = handle is ResizeHandle.TopLeft or ResizeHandle.TopRight;
         var widthChange = movesLeft ? -deltaWidthMm : deltaWidthMm;
         var heightChange = movesTop ? -deltaHeightMm : deltaHeightMm;
         var relativeWidthChange = widthChange / width;
@@ -410,8 +487,6 @@ public partial class MainWindow : Window
             ? relativeWidthChange
             : relativeHeightChange);
 
-        var fixedX = movesLeft ? x + width : x;
-        var fixedY = movesTop ? y + height : y;
         var minimumScale = Math.Max(minimumImageSizeMm / width, minimumImageSizeMm / height);
         var rotatedBounds = GetRotatedImageBounds(width, height, rotation);
         var maximumScale = Math.Min(
@@ -420,10 +495,43 @@ public partial class MainWindow : Window
         var scale = Clamp(requestedScale, Math.Min(minimumScale, maximumScale), Math.Max(minimumScale, maximumScale));
         var newWidth = width * scale;
         var newHeight = height * scale;
-        var newX = movesLeft ? fixedX - newWidth : fixedX;
-        var newY = movesTop ? fixedY - newHeight : fixedY;
+        var anchoredPosition = GetAnchoredResizePosition(
+            x, y, width, height, newWidth, newHeight, rotation,
+            movesLeft, movesTop, !movesLeft, !movesTop);
 
-        ApplyPreviewImagePlacement(viewModel, entry, isBackImage, newX, newY, newWidth, newHeight, rotation);
+        ApplyPreviewImagePlacement(
+            viewModel, entry, isBackImage,
+            anchoredPosition.X, anchoredPosition.Y, newWidth, newHeight, rotation);
+    }
+
+    private static (double X, double Y) GetAnchoredResizePosition(
+        double x,
+        double y,
+        double oldWidth,
+        double oldHeight,
+        double newWidth,
+        double newHeight,
+        double rotation,
+        bool movesLeft,
+        bool movesTop,
+        bool movesRight,
+        bool movesBottom)
+    {
+        var fixedLocalX = movesLeft ? oldWidth / 2 : movesRight ? -oldWidth / 2 : 0;
+        var fixedLocalY = movesTop ? oldHeight / 2 : movesBottom ? -oldHeight / 2 : 0;
+        var newCenterFromFixedX = movesLeft ? -newWidth / 2 : movesRight ? newWidth / 2 : 0;
+        var newCenterFromFixedY = movesTop ? -newHeight / 2 : movesBottom ? newHeight / 2 : 0;
+        var radians = rotation * Math.PI / 180.0;
+        var cos = Math.Cos(radians);
+        var sin = Math.Sin(radians);
+        var oldCenterX = x + oldWidth / 2;
+        var oldCenterY = y + oldHeight / 2;
+        var fixedWorldX = oldCenterX + fixedLocalX * cos - fixedLocalY * sin;
+        var fixedWorldY = oldCenterY + fixedLocalX * sin + fixedLocalY * cos;
+        var newCenterX = fixedWorldX + newCenterFromFixedX * cos - newCenterFromFixedY * sin;
+        var newCenterY = fixedWorldY + newCenterFromFixedX * sin + newCenterFromFixedY * cos;
+
+        return (newCenterX - newWidth / 2, newCenterY - newHeight / 2);
     }
 
     private static void ScalePreviewImage(MainViewModel viewModel, NamePlateEntry entry, bool isBackImage, double factor)
@@ -531,6 +639,7 @@ public partial class MainWindow : Window
             viewModel.OverlayImageY = 0;
             viewModel.OverlayImageWidth = Math.Max(1, viewModel.WidthMm);
             viewModel.OverlayImageHeight = Math.Max(1, viewModel.HeightMm);
+            viewModel.OverlayImageRotation = 0;
         }
     }
 
@@ -594,14 +703,41 @@ public partial class MainWindow : Window
         return null;
     }
 
-    private static ResizeCorner GetResizeCorner(FrameworkElement element)
+    private static ResizeHandle GetResizeHandle(FrameworkElement element)
     {
         return element.Tag?.ToString() switch
         {
-            "TopLeft" => ResizeCorner.TopLeft,
-            "TopRight" => ResizeCorner.TopRight,
-            "BottomLeft" => ResizeCorner.BottomLeft,
-            _ => ResizeCorner.BottomRight
+            "Left" => ResizeHandle.Left,
+            "Top" => ResizeHandle.Top,
+            "Right" => ResizeHandle.Right,
+            "Bottom" => ResizeHandle.Bottom,
+            "TopLeft" => ResizeHandle.TopLeft,
+            "TopRight" => ResizeHandle.TopRight,
+            "BottomLeft" => ResizeHandle.BottomLeft,
+            _ => ResizeHandle.BottomRight
+        };
+    }
+
+    private static bool IsCornerHandle(ResizeHandle handle)
+        => handle is ResizeHandle.TopLeft
+            or ResizeHandle.TopRight
+            or ResizeHandle.BottomLeft
+            or ResizeHandle.BottomRight;
+
+    private static System.Windows.Input.Cursor GetResizeCursor(double direction)
+    {
+        var normalized = direction % 180;
+        if (normalized < 0)
+        {
+            normalized += 180;
+        }
+
+        return normalized switch
+        {
+            < 22.5 or >= 157.5 => WpfCursors.SizeWE,
+            < 67.5 => WpfCursors.SizeNWSE,
+            < 112.5 => WpfCursors.SizeNS,
+            _ => WpfCursors.SizeNESW
         };
     }
 
@@ -654,7 +790,7 @@ public partial class MainWindow : Window
         bool IsBackImage,
         Canvas ParentCanvas,
         System.Windows.Point StartPointer,
-        ResizeCorner Corner,
+        ResizeHandle Handle,
         double StartX,
         double StartY,
         double StartWidth,
@@ -669,8 +805,14 @@ public partial class MainWindow : Window
         double StartPointerAngle,
         double StartRotation);
 
-    private enum ResizeCorner
+    private sealed record SelectedPreviewImage(NamePlateEntry Entry, bool IsBackImage);
+
+    private enum ResizeHandle
     {
+        Left,
+        Top,
+        Right,
+        Bottom,
         TopLeft,
         TopRight,
         BottomLeft,

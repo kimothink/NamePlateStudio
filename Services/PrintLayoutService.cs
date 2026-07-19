@@ -109,8 +109,10 @@ public sealed class PrintLayoutService
                 (entry.NameText ?? string.Empty).Trim(),
                 (entry.TitleText ?? string.Empty).Trim(),
                 (entry.CompanyText ?? string.Empty).Trim(),
-                entry.BackgroundImagePath ?? string.Empty,
-                entry.OverlayImagePath ?? string.Empty,
+                string.Empty,
+                !string.IsNullOrWhiteSpace(entry.OverlayImagePath)
+                    ? entry.OverlayImagePath
+                    : entry.BackgroundImagePath ?? string.Empty,
                 entry.BackContent ?? string.Empty,
                 entry.BackImagePath ?? string.Empty,
                 entry.BackImageWidthMm,

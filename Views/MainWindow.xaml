@@ -12,7 +12,9 @@
         MinWidth="1040"
         MinHeight="700"
         Background="#F1F5F9"
-        FontFamily="Malgun Gothic">
+        FontFamily="Malgun Gothic"
+        PreviewMouseDown="Window_PreviewMouseDown"
+        PreviewKeyDown="Window_PreviewKeyDown">
     <Window.Resources>
         <helpers:AlignmentOffsetConverter x:Key="AlignmentOffsetConverter" />
         <helpers:ImagePathToImageSourceConverter x:Key="ImagePathToImageSourceConverter" />
@@ -77,13 +79,15 @@
             <Setter Property="Background" Value="#334155" />
         </Style>
 
-        <Style x:Key="PreviewResizeThumbStyle" TargetType="{x:Type primitives:Thumb}">
-            <Setter Property="Width" Value="20" />
-            <Setter Property="Height" Value="20" />
+        <Style x:Key="PreviewCornerResizeThumbStyle" TargetType="{x:Type primitives:Thumb}">
+            <Setter Property="Width" Value="18" />
+            <Setter Property="Height" Value="18" />
             <Setter Property="HorizontalAlignment" Value="Right" />
             <Setter Property="VerticalAlignment" Value="Bottom" />
             <Setter Property="Cursor" Value="SizeNWSE" />
-            <Setter Property="ToolTip" Value="끌어서 크기 조절" />
+            <Setter Property="Panel.ZIndex" Value="2" />
+            <Setter Property="ToolTip" Value="꼭짓점을 끌어 비율을 유지하며 크기 조절" />
+            <EventSetter Event="MouseEnter" Handler="PreviewImageResizeThumb_MouseEnter" />
             <EventSetter Event="DragStarted" Handler="PreviewImageResizeThumb_DragStarted" />
             <EventSetter Event="DragDelta" Handler="PreviewImageResizeThumb_DragDelta" />
             <EventSetter Event="DragCompleted" Handler="PreviewImageResizeThumb_DragCompleted" />
@@ -99,23 +103,55 @@
             </Setter>
         </Style>
 
+        <Style x:Key="PreviewEdgeResizeThumbStyle" TargetType="{x:Type primitives:Thumb}">
+            <Setter Property="Panel.ZIndex" Value="1" />
+            <Setter Property="ToolTip" Value="변을 끌어 한 방향으로 크기 조절" />
+            <EventSetter Event="MouseEnter" Handler="PreviewImageResizeThumb_MouseEnter" />
+            <EventSetter Event="DragStarted" Handler="PreviewImageResizeThumb_DragStarted" />
+            <EventSetter Event="DragDelta" Handler="PreviewImageResizeThumb_DragDelta" />
+            <EventSetter Event="DragCompleted" Handler="PreviewImageResizeThumb_DragCompleted" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type primitives:Thumb}">
+                        <Border Background="Transparent" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="PreviewRotateThumbStyle" TargetType="{x:Type primitives:Thumb}">
-            <Setter Property="Width" Value="22" />
-            <Setter Property="Height" Value="22" />
-            <Setter Property="HorizontalAlignment" Value="Center" />
-            <Setter Property="VerticalAlignment" Value="Top" />
-            <Setter Property="Margin" Value="0,3,0,0" />
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="44" />
             <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="ToolTip" Value="끌어서 회전 (Shift: 15° 단위)" />
+            <Setter Property="Panel.ZIndex" Value="3" />
+            <Setter Property="ToolTip" Value="이미지 회전 (Shift: 15° 단위)" />
             <EventSetter Event="DragStarted" Handler="PreviewImageRotateThumb_DragStarted" />
             <EventSetter Event="DragDelta" Handler="PreviewImageRotateThumb_DragDelta" />
             <EventSetter Event="DragCompleted" Handler="PreviewImageRotateThumb_DragCompleted" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="{x:Type primitives:Thumb}">
-                        <Ellipse Fill="#F59E0B"
-                                 Stroke="#FFFFFF"
-                                 StrokeThickness="2" />
+                        <Grid>
+                            <Line X1="14" Y1="22" X2="14" Y2="43"
+                                  Stroke="#2563EB"
+                                  StrokeThickness="1.5"
+                                  IsHitTestVisible="False" />
+                            <Border Width="24"
+                                    Height="24"
+                                    VerticalAlignment="Top"
+                                    Background="#FFFFFF"
+                                    BorderBrush="#2563EB"
+                                    BorderThickness="2"
+                                    CornerRadius="12">
+                                <TextBlock Text="↻"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           FontFamily="Segoe UI Symbol"
+                                           FontSize="16"
+                                           FontWeight="Bold"
+                                           Foreground="#2563EB" />
+                            </Border>
+                        </Grid>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -175,7 +211,19 @@
                             </StackPanel>
                         </Grid>
 
-                        <TextBlock Text="명패 내용 목록" Style="{StaticResource SectionTitleStyle}" />
+                        <Grid Margin="0,18,0,4">
+                            <TextBlock Text="명패 내용 목록"
+                                       Margin="0"
+                                       FontSize="15"
+                                       FontWeight="Bold"
+                                       Foreground="#0F172A"
+                                       VerticalAlignment="Center" />
+                            <CheckBox Content="양면 인쇄 사용"
+                                      IsChecked="{Binding IsDoubleSided}"
+                                      HorizontalAlignment="Right"
+                                      Margin="0"
+                                      ToolTip="A4 용지에 앞면과 뒷면을 함께 미리보고 인쇄합니다." />
+                        </Grid>
                         <TextBlock Text="각 행이 명패 1개로 출력됩니다. 소개 문구와 소속/메모는 비워도 됩니다."
                                    Margin="0,0,0,6"
                                    Foreground="#64748B" />
@@ -216,60 +264,23 @@
                             <Button Content="선택 삭제" Command="{Binding RemoveEntryCommand}" Margin="8,4,0,0" Style="{StaticResource SecondaryButtonStyle}" />
                         </UniformGrid>
 
-                        <TextBlock Text="양면 인쇄" Style="{StaticResource SectionTitleStyle}" />
-                        <CheckBox Content="양면 인쇄 사용 (긴 쪽 넘김)"
-                                  IsChecked="{Binding IsDoubleSided}" />
-
-                        <TextBlock Text="선택 항목 이미지" Style="{StaticResource SectionTitleStyle}" />
+                        <TextBlock Text="선택 항목 그림" Style="{StaticResource SectionTitleStyle}" />
                         <TextBlock Text="{Binding SelectedEntry.NameText, StringFormat=선택: {0}, TargetNullValue=선택된 항목 없음}"
                                    Margin="0,0,0,6"
                                    Foreground="#64748B" />
-                        <Border Margin="0,2,0,8"
-                                Padding="10,7"
-                                Background="#EFF6FF"
-                                BorderBrush="#BFDBFE"
-                                BorderThickness="1"
-                                CornerRadius="4">
-                            <StackPanel>
-                                <CheckBox Content="앞면 그림을 모든 명찰에 적용"
-                                          IsChecked="{Binding ApplyFrontImagesToAllEntries}"
-                                          Margin="0"
-                                          FontWeight="SemiBold" />
-                                <TextBlock Text="배경 이미지와 이미지/로고를 모든 명찰에 동일하게 적용합니다."
-                                           Margin="22,4,0,0"
-                                           FontSize="11"
-                                           TextWrapping="Wrap"
-                                           Foreground="#475569" />
-                            </StackPanel>
-                        </Border>
-
-                        <TextBlock Text="배경 이미지" Style="{StaticResource FieldLabelStyle}" />
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="68" />
-                                <ColumnDefinition Width="68" />
-                            </Grid.ColumnDefinitions>
-                            <TextBox Text="{Binding SelectedEntry.BackgroundImagePath, Mode=OneWay}" IsReadOnly="True" />
-                            <Button Grid.Column="1"
-                                    Content="선택"
-                                    Command="{Binding SelectEntryBackgroundImageCommand}"
-                                    Margin="8,4,0,0"
-                                    Style="{StaticResource SecondaryButtonStyle}" />
-                            <Button Grid.Column="2"
-                                    Content="삭제"
-                                    Command="{Binding ClearEntryBackgroundImageCommand}"
-                                    Margin="8,4,0,0"
-                                    Style="{StaticResource SecondaryButtonStyle}" />
+                        <Grid Margin="0,9,0,4">
+                            <TextBlock Text="앞면 그림"
+                                       VerticalAlignment="Center"
+                                       FontSize="13"
+                                       FontWeight="SemiBold"
+                                       Foreground="#334155" />
+                            <CheckBox Content="모든 명찰에 적용"
+                                      IsChecked="{Binding ApplyFrontImagesToAllEntries}"
+                                      HorizontalAlignment="Right"
+                                      Margin="0"
+                                      FontWeight="SemiBold"
+                                      ToolTip="현재 앞면 그림을 모든 명찰에 동일하게 적용합니다." />
                         </Grid>
-
-                        <CheckBox Content="이미지 색상으로 앞면 배경"
-                                  IsChecked="{Binding MatchFrontBackgroundToImage}"
-                                  Margin="0,6,0,0"
-                                  FontWeight="SemiBold"
-                                  ToolTip="선택한 앞면 배경 이미지나 이미지/로고의 대표 색상을 앞면 배경색으로 자동 적용" />
-
-                        <TextBlock Text="이미지/로고" Style="{StaticResource FieldLabelStyle}" />
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -289,30 +300,14 @@
                                     Style="{StaticResource SecondaryButtonStyle}" />
                         </Grid>
 
-                        <TextBlock Text="앞면 그림 회전" Style="{StaticResource FieldLabelStyle}" />
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="58" />
-                            </Grid.ColumnDefinitions>
-                            <Slider Minimum="0" Maximum="359"
-                                    TickFrequency="1"
-                                    IsSnapToTickEnabled="True"
-                                    Value="{Binding OverlayImageRotation, UpdateSourceTrigger=PropertyChanged}"
-                                    VerticalAlignment="Center" />
-                            <TextBlock Grid.Column="1"
-                                       Text="{Binding OverlayImageRotation, StringFormat={}{0:0}°}"
-                                       HorizontalAlignment="Right"
-                                       VerticalAlignment="Center"
-                                       FontWeight="SemiBold" />
-                        </Grid>
                         <UniformGrid Columns="3" Margin="0,4,0,0">
                             <Button Content="작게" Command="{Binding ScaleFrontImageCommand}" CommandParameter="0.9" Style="{StaticResource SecondaryButtonStyle}" />
                             <Button Content="크게" Command="{Binding ScaleFrontImageCommand}" CommandParameter="1.1" Margin="8,4,0,0" Style="{StaticResource SecondaryButtonStyle}" />
-                            <Button Content="명찰 맞춤" Command="{Binding FitFrontImageCommand}" Margin="8,4,0,0" Style="{StaticResource SecondaryButtonStyle}" />
-                            <Button Content="↶ 90°" Command="{Binding RotateFrontImageCommand}" CommandParameter="-90" Style="{StaticResource SecondaryButtonStyle}" />
-                            <Button Content="회전 초기화" Command="{Binding ResetFrontImageRotationCommand}" Margin="8,4,0,0" Style="{StaticResource SecondaryButtonStyle}" />
-                            <Button Content="↷ 90°" Command="{Binding RotateFrontImageCommand}" CommandParameter="90" Margin="8,4,0,0" Style="{StaticResource SecondaryButtonStyle}" />
+                            <Button Content="배경으로 꽉 채우기"
+                                    Command="{Binding FitFrontImageCommand}"
+                                    Margin="8,4,0,0"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    ToolTip="앞면 그림을 명패 전체 크기로 맞춥니다." />
                         </UniformGrid>
 
                         <TextBlock Text="선택 항목 뒷면" Style="{StaticResource SectionTitleStyle}" />
@@ -334,7 +329,7 @@
                                       HorizontalAlignment="Right"
                                       Margin="0"
                                       FontWeight="SemiBold"
-                                      ToolTip="뒷면 그림과 위치·크기·회전을 모든 명찰에 동일하게 적용" />
+                                      ToolTip="현재 뒷면 그림을 모든 명찰에 동일하게 적용" />
                         </Grid>
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -355,72 +350,17 @@
                                     Style="{StaticResource SecondaryButtonStyle}" />
                         </Grid>
 
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="12" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-
-                            <StackPanel Grid.Column="0">
-                                <TextBlock Text="그림 가로(mm)" Style="{StaticResource FieldLabelStyle}" />
-                                <TextBox Text="{Binding SelectedEntry.BackImageWidthMm, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:0.##}}" />
-                            </StackPanel>
-
-                            <StackPanel Grid.Column="2">
-                                <TextBlock Text="그림 세로(mm)" Style="{StaticResource FieldLabelStyle}" />
-                                <TextBox Text="{Binding SelectedEntry.BackImageHeightMm, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:0.##}}" />
-                            </StackPanel>
-                        </Grid>
-
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="12" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-
-                            <StackPanel Grid.Column="0">
-                                <TextBlock Text="그림 X(mm)" Style="{StaticResource FieldLabelStyle}" />
-                                <TextBox Text="{Binding SelectedEntry.BackImageX, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:0.##}}" />
-                            </StackPanel>
-
-                            <StackPanel Grid.Column="2">
-                                <TextBlock Text="그림 Y(mm)" Style="{StaticResource FieldLabelStyle}" />
-                                <TextBox Text="{Binding SelectedEntry.BackImageY, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:0.##}}" />
-                            </StackPanel>
-                        </Grid>
-
-                        <TextBlock Text="뒷면 그림 회전" Style="{StaticResource FieldLabelStyle}" />
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="58" />
-                            </Grid.ColumnDefinitions>
-                            <Slider Minimum="0" Maximum="359"
-                                    TickFrequency="1"
-                                    IsSnapToTickEnabled="True"
-                                    Value="{Binding SelectedEntry.BackImageRotation, UpdateSourceTrigger=PropertyChanged}"
-                                    VerticalAlignment="Center" />
-                            <TextBlock Grid.Column="1"
-                                       Text="{Binding SelectedEntry.BackImageRotation, StringFormat={}{0:0}°}"
-                                       HorizontalAlignment="Right"
-                                       VerticalAlignment="Center"
-                                       FontWeight="SemiBold" />
-                        </Grid>
-                        <UniformGrid Columns="3" Margin="0,4,0,0">
+                        <UniformGrid Columns="3" Margin="0,8,0,0">
                             <Button Content="작게" Command="{Binding ScaleBackImageCommand}" CommandParameter="0.9" Style="{StaticResource SecondaryButtonStyle}" />
                             <Button Content="크게" Command="{Binding ScaleBackImageCommand}" CommandParameter="1.1" Margin="8,4,0,0" Style="{StaticResource SecondaryButtonStyle}" />
                             <Button Content="원본 전체" Command="{Binding FitBackImageCommand}" Margin="8,4,0,0" Style="{StaticResource SecondaryButtonStyle}" />
-                            <Button Content="↶ 90°" Command="{Binding RotateBackImageCommand}" CommandParameter="-90" Style="{StaticResource SecondaryButtonStyle}" />
-                            <Button Content="회전 초기화" Command="{Binding ResetBackImageRotationCommand}" Margin="8,4,0,0" Style="{StaticResource SecondaryButtonStyle}" />
-                            <Button Content="↷ 90°" Command="{Binding RotateBackImageCommand}" CommandParameter="90" Margin="8,4,0,0" Style="{StaticResource SecondaryButtonStyle}" />
                         </UniformGrid>
 
-                        <CheckBox Content="모서리 드래그 시 그림 비율 유지"
-                                  IsChecked="{Binding LockImageAspectRatio}"
-                                  Margin="0,10,0,0"
-                                  FontWeight="SemiBold" />
+                        <TextBlock Margin="0,10,0,0"
+                                   Text="변: 한 방향 크기 조절 · 꼭짓점: 비율 유지 · 꼭짓점 바깥 핸들: 회전"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"
+                                   Foreground="#64748B" />
 
                         <TextBlock Text="글꼴" Style="{StaticResource FieldLabelStyle}" />
                         <ComboBox ItemsSource="{Binding FontFamilies}"
@@ -579,7 +519,7 @@
                                 Margin="0,10,0,0"
                                 Style="{StaticResource SecondaryButtonStyle}" />
 
-                        <TextBlock Text="이미지/로고 위치" Style="{StaticResource SectionTitleStyle}" />
+                        <TextBlock Text="앞면 그림 위치" Style="{StaticResource SectionTitleStyle}" />
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -684,8 +624,8 @@
                                    Foreground="#475569" />
 
                         <UniformGrid Columns="2" Margin="0,18,0,0">
-                            <Button Content="저장" Command="{Binding SaveCommand}" />
-                            <Button Content="불러오기" Command="{Binding LoadCommand}" Margin="8,4,0,0" Style="{StaticResource SecondaryButtonStyle}" />
+                            <Button Content="양식 저장" Command="{Binding SaveCommand}" />
+                            <Button Content="양식 불러오기" Command="{Binding LoadCommand}" Margin="8,4,0,0" Style="{StaticResource SecondaryButtonStyle}" />
                             <Button Content="미리보기" Command="{Binding PreviewCommand}" Style="{StaticResource SecondaryButtonStyle}" />
                             <Button Content="인쇄" Command="{Binding PrintCommand}" Margin="8,4,0,0" />
                             <Button Content="초기화" Command="{Binding ResetCommand}" Style="{StaticResource SecondaryButtonStyle}" />
@@ -818,14 +758,11 @@
                                                   Height="{Binding HeightPixels}"
                                                   Background="{Binding DataContext.BackgroundBrush, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                   ClipToBounds="True">
-                                                <Image Source="{Binding Entry.BackgroundImagePath, Converter={StaticResource ImagePathToImageSourceConverter}}"
-                                                       Stretch="UniformToFill"
-                                                       Width="{Binding WidthPixels}"
-                                                       Height="{Binding HeightPixels}"
-                                                       IsHitTestVisible="False" />
                                                 <Border Background="Transparent"
                                                         BorderBrush="{Binding DataContext.BorderBrush, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                        BorderThickness="{Binding DataContext.PreviewBorderThickness, RelativeSource={RelativeSource AncestorType=ItemsControl}}" />
+                                                        BorderThickness="{Binding DataContext.PreviewBorderThickness, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        Panel.ZIndex="3"
+                                                        IsHitTestVisible="False" />
 
                                                 <Canvas Width="{Binding WidthPixels}" Height="{Binding HeightPixels}" ClipToBounds="True">
                                                     <Line X1="{Binding DataContext.DecorationLineStartX, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
@@ -835,6 +772,8 @@
                                                           Stroke="{Binding DataContext.BorderBrush, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                           StrokeThickness="1.5"
                                                           Opacity="0.75"
+                                                          Panel.ZIndex="2"
+                                                          IsHitTestVisible="False"
                                                           Visibility="{Binding DataContext.HasDecorationLine, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                                     <Line X1="{Binding DataContext.DecorationLineStartX, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                           X2="{Binding DataContext.DecorationLineEndX, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
@@ -843,6 +782,8 @@
                                                           Stroke="{Binding DataContext.BorderBrush, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                           StrokeThickness="1.5"
                                                           Opacity="0.75"
+                                                          Panel.ZIndex="2"
+                                                          IsHitTestVisible="False"
                                                           Visibility="{Binding DataContext.HasDecorationLine, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
                                                     <Grid Canvas.Left="{Binding DataContext.OverlayImageXPixels, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
@@ -852,6 +793,7 @@
                                                           Visibility="{Binding Entry.OverlayImagePath, Converter={StaticResource StringNotEmptyToVisibilityConverter}}"
                                                           Background="Transparent"
                                                           Tag="FrontOverlay"
+                                                          Panel.ZIndex="0"
                                                           Cursor="SizeAll"
                                                           RenderTransformOrigin="0.5,0.5"
                                                           MouseLeftButtonDown="PreviewImage_MouseLeftButtonDown"
@@ -860,7 +802,7 @@
                                                           MouseWheel="PreviewImage_MouseWheel">
                                                         <Grid.ContextMenu>
                                                             <ContextMenu>
-                                                                <MenuItem Header="꽉 차게" Tag="Fill" Click="PreviewImageContextMenu_Click" />
+                                                                <MenuItem Header="배경으로 꽉 채우기" Tag="Fill" Click="PreviewImageContextMenu_Click" />
                                                                 <MenuItem Header="좌회전" Tag="RotateLeft" Click="PreviewImageContextMenu_Click" />
                                                                 <MenuItem Header="우회전" Tag="RotateRight" Click="PreviewImageContextMenu_Click" />
                                                             </ContextMenu>
@@ -875,27 +817,80 @@
                                                                 BorderThickness="1"
                                                                 Background="#11000000"
                                                                 IsHitTestVisible="False" />
-                                                        <primitives:Thumb Style="{StaticResource PreviewResizeThumbStyle}"
+                                                        <primitives:Thumb Style="{StaticResource PreviewEdgeResizeThumbStyle}"
+                                                                          Width="12"
+                                                                          HorizontalAlignment="Left"
+                                                                          VerticalAlignment="Stretch"
+                                                                          Margin="0,14,0,14"
+                                                                          Cursor="SizeWE"
+                                                                          Tag="Left" />
+                                                        <primitives:Thumb Style="{StaticResource PreviewEdgeResizeThumbStyle}"
+                                                                          Width="12"
+                                                                          HorizontalAlignment="Right"
+                                                                          VerticalAlignment="Stretch"
+                                                                          Margin="0,14,0,14"
+                                                                          Cursor="SizeWE"
+                                                                          Tag="Right" />
+                                                        <primitives:Thumb Style="{StaticResource PreviewEdgeResizeThumbStyle}"
+                                                                          Height="12"
+                                                                          HorizontalAlignment="Stretch"
+                                                                          VerticalAlignment="Top"
+                                                                          Margin="14,0,14,0"
+                                                                          Cursor="SizeNS"
+                                                                          Tag="Top" />
+                                                        <primitives:Thumb Style="{StaticResource PreviewEdgeResizeThumbStyle}"
+                                                                          Height="12"
+                                                                          HorizontalAlignment="Stretch"
+                                                                          VerticalAlignment="Bottom"
+                                                                          Margin="14,0,14,0"
+                                                                          Cursor="SizeNS"
+                                                                          Tag="Bottom" />
+                                                        <primitives:Thumb Style="{StaticResource PreviewCornerResizeThumbStyle}"
                                                                           HorizontalAlignment="Left"
                                                                           VerticalAlignment="Top"
                                                                           Cursor="SizeNWSE"
                                                                           Tag="TopLeft" />
-                                                        <primitives:Thumb Style="{StaticResource PreviewResizeThumbStyle}"
+                                                        <primitives:Thumb Style="{StaticResource PreviewCornerResizeThumbStyle}"
                                                                           HorizontalAlignment="Right"
                                                                           VerticalAlignment="Top"
                                                                           Cursor="SizeNESW"
                                                                           Tag="TopRight" />
-                                                        <primitives:Thumb Style="{StaticResource PreviewResizeThumbStyle}"
+                                                        <primitives:Thumb Style="{StaticResource PreviewCornerResizeThumbStyle}"
                                                                           HorizontalAlignment="Left"
                                                                           VerticalAlignment="Bottom"
                                                                           Cursor="SizeNESW"
                                                                           Tag="BottomLeft" />
-                                                        <primitives:Thumb Style="{StaticResource PreviewResizeThumbStyle}"
+                                                        <primitives:Thumb Style="{StaticResource PreviewCornerResizeThumbStyle}"
                                                                           HorizontalAlignment="Right"
                                                                           VerticalAlignment="Bottom"
                                                                           Cursor="SizeNWSE"
                                                                           Tag="BottomRight" />
-                                                        <primitives:Thumb Style="{StaticResource PreviewRotateThumbStyle}" />
+                                                        <primitives:Thumb Style="{StaticResource PreviewRotateThumbStyle}"
+                                                                          HorizontalAlignment="Left"
+                                                                          VerticalAlignment="Top"
+                                                                          Margin="-34,-44,0,0" />
+                                                        <primitives:Thumb Style="{StaticResource PreviewRotateThumbStyle}"
+                                                                          HorizontalAlignment="Right"
+                                                                          VerticalAlignment="Top"
+                                                                          Margin="0,-44,-34,0" />
+                                                        <primitives:Thumb Style="{StaticResource PreviewRotateThumbStyle}"
+                                                                          HorizontalAlignment="Left"
+                                                                          VerticalAlignment="Bottom"
+                                                                          Margin="-34,0,0,-44"
+                                                                          RenderTransformOrigin="0.5,0.5">
+                                                            <primitives:Thumb.RenderTransform>
+                                                                <RotateTransform Angle="180" />
+                                                            </primitives:Thumb.RenderTransform>
+                                                        </primitives:Thumb>
+                                                        <primitives:Thumb Style="{StaticResource PreviewRotateThumbStyle}"
+                                                                          HorizontalAlignment="Right"
+                                                                          VerticalAlignment="Bottom"
+                                                                          Margin="0,0,-34,-44"
+                                                                          RenderTransformOrigin="0.5,0.5">
+                                                            <primitives:Thumb.RenderTransform>
+                                                                <RotateTransform Angle="180" />
+                                                            </primitives:Thumb.RenderTransform>
+                                                        </primitives:Thumb>
                                                     </Grid>
 
                                                     <TextBlock x:Name="CopyCompanyTextBlock"
@@ -905,7 +900,9 @@
                                                                FontFamily="{Binding DataContext.SelectedFontFamily, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                                FontSize="{Binding DataContext.CompanyFontSize, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                                Foreground="{Binding DataContext.FontBrush, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                               FontStyle="{Binding DataContext.NameFontStyle, RelativeSource={RelativeSource AncestorType=ItemsControl}}">
+                                                               FontStyle="{Binding DataContext.NameFontStyle, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                               Panel.ZIndex="2"
+                                                               IsHitTestVisible="False">
                                                         <TextBlock.RenderTransform>
                                                             <TranslateTransform>
                                                                 <TranslateTransform.X>
@@ -932,7 +929,9 @@
                                                                FontSize="{Binding DataContext.FontSize, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                                FontWeight="{Binding DataContext.NameFontWeight, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                                FontStyle="{Binding DataContext.NameFontStyle, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                               Foreground="{Binding DataContext.FontBrush, RelativeSource={RelativeSource AncestorType=ItemsControl}}">
+                                                               Foreground="{Binding DataContext.FontBrush, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                               Panel.ZIndex="2"
+                                                               IsHitTestVisible="False">
                                                         <TextBlock.RenderTransform>
                                                             <TranslateTransform>
                                                                 <TranslateTransform.X>
@@ -958,7 +957,9 @@
                                                                FontFamily="{Binding DataContext.SelectedFontFamily, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                                FontSize="{Binding DataContext.TitleFontSize, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                                Foreground="{Binding DataContext.FontBrush, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                               FontStyle="{Binding DataContext.NameFontStyle, RelativeSource={RelativeSource AncestorType=ItemsControl}}">
+                                                               FontStyle="{Binding DataContext.NameFontStyle, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                               Panel.ZIndex="2"
+                                                               IsHitTestVisible="False">
                                                         <TextBlock.RenderTransform>
                                                             <TranslateTransform>
                                                                 <TranslateTransform.X>
@@ -981,6 +982,7 @@
                                                 <Rectangle Stroke="#475569"
                                                            StrokeThickness="1"
                                                            StrokeDashArray="5,3"
+                                                           Panel.ZIndex="4"
                                                            IsHitTestVisible="False" />
                                               </Grid>
 
@@ -1069,27 +1071,80 @@
                                                                 BorderThickness="1"
                                                                 Background="#11000000"
                                                                 IsHitTestVisible="False" />
-                                                        <primitives:Thumb Style="{StaticResource PreviewResizeThumbStyle}"
+                                                        <primitives:Thumb Style="{StaticResource PreviewEdgeResizeThumbStyle}"
+                                                                          Width="12"
+                                                                          HorizontalAlignment="Left"
+                                                                          VerticalAlignment="Stretch"
+                                                                          Margin="0,14,0,14"
+                                                                          Cursor="SizeWE"
+                                                                          Tag="Left" />
+                                                        <primitives:Thumb Style="{StaticResource PreviewEdgeResizeThumbStyle}"
+                                                                          Width="12"
+                                                                          HorizontalAlignment="Right"
+                                                                          VerticalAlignment="Stretch"
+                                                                          Margin="0,14,0,14"
+                                                                          Cursor="SizeWE"
+                                                                          Tag="Right" />
+                                                        <primitives:Thumb Style="{StaticResource PreviewEdgeResizeThumbStyle}"
+                                                                          Height="12"
+                                                                          HorizontalAlignment="Stretch"
+                                                                          VerticalAlignment="Top"
+                                                                          Margin="14,0,14,0"
+                                                                          Cursor="SizeNS"
+                                                                          Tag="Top" />
+                                                        <primitives:Thumb Style="{StaticResource PreviewEdgeResizeThumbStyle}"
+                                                                          Height="12"
+                                                                          HorizontalAlignment="Stretch"
+                                                                          VerticalAlignment="Bottom"
+                                                                          Margin="14,0,14,0"
+                                                                          Cursor="SizeNS"
+                                                                          Tag="Bottom" />
+                                                        <primitives:Thumb Style="{StaticResource PreviewCornerResizeThumbStyle}"
                                                                           HorizontalAlignment="Left"
                                                                           VerticalAlignment="Top"
                                                                           Cursor="SizeNWSE"
                                                                           Tag="TopLeft" />
-                                                        <primitives:Thumb Style="{StaticResource PreviewResizeThumbStyle}"
+                                                        <primitives:Thumb Style="{StaticResource PreviewCornerResizeThumbStyle}"
                                                                           HorizontalAlignment="Right"
                                                                           VerticalAlignment="Top"
                                                                           Cursor="SizeNESW"
                                                                           Tag="TopRight" />
-                                                        <primitives:Thumb Style="{StaticResource PreviewResizeThumbStyle}"
+                                                        <primitives:Thumb Style="{StaticResource PreviewCornerResizeThumbStyle}"
                                                                           HorizontalAlignment="Left"
                                                                           VerticalAlignment="Bottom"
                                                                           Cursor="SizeNESW"
                                                                           Tag="BottomLeft" />
-                                                        <primitives:Thumb Style="{StaticResource PreviewResizeThumbStyle}"
+                                                        <primitives:Thumb Style="{StaticResource PreviewCornerResizeThumbStyle}"
                                                                           HorizontalAlignment="Right"
                                                                           VerticalAlignment="Bottom"
                                                                           Cursor="SizeNWSE"
                                                                           Tag="BottomRight" />
-                                                        <primitives:Thumb Style="{StaticResource PreviewRotateThumbStyle}" />
+                                                        <primitives:Thumb Style="{StaticResource PreviewRotateThumbStyle}"
+                                                                          HorizontalAlignment="Left"
+                                                                          VerticalAlignment="Top"
+                                                                          Margin="-34,-44,0,0" />
+                                                        <primitives:Thumb Style="{StaticResource PreviewRotateThumbStyle}"
+                                                                          HorizontalAlignment="Right"
+                                                                          VerticalAlignment="Top"
+                                                                          Margin="0,-44,-34,0" />
+                                                        <primitives:Thumb Style="{StaticResource PreviewRotateThumbStyle}"
+                                                                          HorizontalAlignment="Left"
+                                                                          VerticalAlignment="Bottom"
+                                                                          Margin="-34,0,0,-44"
+                                                                          RenderTransformOrigin="0.5,0.5">
+                                                            <primitives:Thumb.RenderTransform>
+                                                                <RotateTransform Angle="180" />
+                                                            </primitives:Thumb.RenderTransform>
+                                                        </primitives:Thumb>
+                                                        <primitives:Thumb Style="{StaticResource PreviewRotateThumbStyle}"
+                                                                          HorizontalAlignment="Right"
+                                                                          VerticalAlignment="Bottom"
+                                                                          Margin="0,0,-34,-44"
+                                                                          RenderTransformOrigin="0.5,0.5">
+                                                            <primitives:Thumb.RenderTransform>
+                                                                <RotateTransform Angle="180" />
+                                                            </primitives:Thumb.RenderTransform>
+                                                        </primitives:Thumb>
                                                     </Grid>
                                                 </Canvas>
                                                 <Border BorderBrush="{Binding DataContext.BackBorderBrush, RelativeSource={RelativeSource AncestorType=ItemsControl}}"

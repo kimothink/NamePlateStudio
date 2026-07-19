@@ -290,25 +290,15 @@ public sealed class PrintService
             ClipToBounds = true
         };
 
-        var backgroundImage = ImageHelper.CreateImageSource(entry.BackgroundImagePath);
-        if (backgroundImage is not null)
-        {
-            root.Children.Add(new Image
-            {
-                Source = backgroundImage,
-                Width = plateWidth,
-                Height = plateHeight,
-                Stretch = Stretch.UniformToFill,
-                IsHitTestVisible = false
-            });
-        }
-
-        root.Children.Add(new Border
+        var border = new Border
         {
             BorderBrush = borderBrush,
             BorderThickness = new Thickness(Math.Max(0, design.BorderThickness)),
-            Background = Brushes.Transparent
-        });
+            Background = Brushes.Transparent,
+            IsHitTestVisible = false
+        };
+        System.Windows.Controls.Panel.SetZIndex(border, 3);
+        root.Children.Add(border);
 
         var canvas = new Canvas
         {
@@ -330,13 +320,15 @@ public sealed class PrintService
 
         if (showOutputGuide)
         {
-            root.Children.Add(new Rectangle
+            var outputGuide = new Rectangle
             {
                 Stroke = new SolidColorBrush(Color.FromRgb(107, 114, 128)),
                 StrokeThickness = 1,
                 StrokeDashArray = new DoubleCollection { 5, 3 },
                 IsHitTestVisible = false
-            });
+            };
+            System.Windows.Controls.Panel.SetZIndex(outputGuide, 4);
+            root.Children.Add(outputGuide);
         }
 
         return root;
@@ -426,7 +418,7 @@ public sealed class PrintService
 
         foreach (var y in new[] { plateHeight * 0.24, plateHeight * 0.76 })
         {
-            canvas.Children.Add(new Line
+            var line = new Line
             {
                 X1 = startX,
                 X2 = endX,
@@ -435,7 +427,9 @@ public sealed class PrintService
                 Stroke = stroke,
                 StrokeThickness = 1.5,
                 Opacity = 0.75
-            });
+            };
+            Canvas.SetZIndex(line, 2);
+            canvas.Children.Add(line);
         }
     }
 
@@ -460,6 +454,7 @@ public sealed class PrintService
 
         Canvas.SetLeft(image, UnitConverter.MillimetersToPixels(design.OverlayImageX));
         Canvas.SetTop(image, UnitConverter.MillimetersToPixels(design.OverlayImageY));
+        Canvas.SetZIndex(image, 0);
         canvas.Children.Add(image);
     }
 
@@ -487,6 +482,7 @@ public sealed class PrintService
         var anchorY = UnitConverter.MillimetersToPixels(design.PositionY) + offsetY;
         Canvas.SetLeft(textBlock, GetHorizontalLeft(anchorX, textBlock.DesiredSize.Width, design.HorizontalTextAlignment));
         Canvas.SetTop(textBlock, GetVerticalTop(anchorY, textBlock.DesiredSize.Height, offsetY == 0 ? design.VerticalTextAlignment : "가운데"));
+        Canvas.SetZIndex(textBlock, 2);
         canvas.Children.Add(textBlock);
     }
 
