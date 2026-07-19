@@ -84,9 +84,6 @@ public partial class MainViewModel : ObservableObject
     private string backgroundColor = "#FFFFFF";
 
     [ObservableProperty]
-    private bool matchFrontBackgroundToImage;
-
-    [ObservableProperty]
     private string borderColor = "#1F2937";
 
     [ObservableProperty]
@@ -340,28 +337,9 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void SelectEntryBackgroundImage()
-    {
-        SetSelectedEntryImage(isBackground: true);
-    }
-
-    [RelayCommand]
-    private void ClearEntryBackgroundImage()
-    {
-        if (SelectedEntry is null)
-        {
-            ShowNotice("이미지를 지울 항목을 선택해주세요.");
-            return;
-        }
-
-        SelectedEntry.BackgroundImagePath = string.Empty;
-        StatusMessage = "선택한 항목의 배경 이미지를 제거했습니다.";
-    }
-
-    [RelayCommand]
     private void SelectEntryOverlayImage()
     {
-        SetSelectedEntryImage(isBackground: false);
+        SetSelectedEntryImage();
     }
 
     [RelayCommand]
@@ -374,7 +352,7 @@ public partial class MainViewModel : ObservableObject
         }
 
         SelectedEntry.OverlayImagePath = string.Empty;
-        StatusMessage = "선택한 항목의 이미지/로고를 제거했습니다.";
+        StatusMessage = "선택한 항목의 앞면 그림을 제거했습니다.";
     }
 
     [RelayCommand]
@@ -390,32 +368,14 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void RotateFrontImage(string? degreesText)
-    {
-        if (!TryReadDegrees(degreesText, out var degrees))
-        {
-            return;
-        }
-
-        OverlayImageRotation = NormalizeDegrees(OverlayImageRotation + degrees);
-        StatusMessage = $"앞면 그림을 {Math.Abs(degrees):0}도 {(degrees < 0 ? "왼쪽" : "오른쪽")}으로 회전했습니다.";
-    }
-
-    [RelayCommand]
-    private void ResetFrontImageRotation()
-    {
-        OverlayImageRotation = 0;
-        StatusMessage = "앞면 그림 회전을 초기화했습니다.";
-    }
-
-    [RelayCommand]
     private void FitFrontImage()
     {
         OverlayImageX = 0;
         OverlayImageY = 0;
         OverlayImageWidth = Math.Max(1, WidthMm);
         OverlayImageHeight = Math.Max(1, HeightMm);
-        StatusMessage = "앞면 그림을 명찰 크기에 맞췄습니다.";
+        OverlayImageRotation = 0;
+        StatusMessage = "앞면 그림을 배경처럼 명패 전체에 꽉 채웠습니다.";
     }
 
     [RelayCommand]
@@ -541,11 +501,11 @@ public partial class MainViewModel : ObservableObject
         try
         {
             var path = fileService.Save(design!);
-            StatusMessage = path is null ? "저장이 취소되었습니다." : $"저장 완료: {path}";
+            StatusMessage = path is null ? "양식 저장이 취소되었습니다." : $"양식 저장 완료: {path}";
         }
         catch (Exception ex)
         {
-            ShowError($"JSON 저장에 실패했습니다.\n{ex.Message}");
+            ShowError($"양식 저장에 실패했습니다.\n{ex.Message}");
         }
     }
 
@@ -557,16 +517,16 @@ public partial class MainViewModel : ObservableObject
             var (design, path) = fileService.Load();
             if (design is null)
             {
-                StatusMessage = "불러오기가 취소되었습니다.";
+                StatusMessage = "양식 불러오기가 취소되었습니다.";
                 return;
             }
 
             ApplyDesign(design);
-            StatusMessage = $"불러오기 완료: {path}";
+            StatusMessage = $"양식 불러오기 완료: {path}";
         }
         catch (Exception ex)
         {
-            ShowError($"JSON 불러오기에 실패했습니다.\n{ex.Message}");
+            ShowError($"양식 불러오기에 실패했습니다.\n{ex.Message}");
         }
     }
 
@@ -624,11 +584,7 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void SelectBackgroundColor()
     {
-        PickColor("배경", BackgroundColor, selectedColor =>
-        {
-            MatchFrontBackgroundToImage = false;
-            BackgroundColor = selectedColor;
-        });
+        PickColor("배경", BackgroundColor, selectedColor => BackgroundColor = selectedColor);
     }
 
     [RelayCommand]
@@ -681,14 +637,6 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnBorderColorChanged(string value) => RefreshPreviewProperties();
 
-    partial void OnMatchFrontBackgroundToImageChanged(bool value)
-    {
-        if (value)
-        {
-            ApplyFrontBackgroundFromImage();
-        }
-    }
-
     partial void OnBackFontColorChanged(string value) => RefreshPreviewProperties();
 
     partial void OnBackBackgroundColorChanged(string value) => RefreshPreviewProperties();
@@ -710,10 +658,6 @@ public partial class MainViewModel : ObservableObject
             ApplyBackBackgroundFromImage();
         }
 
-        if (MatchFrontBackgroundToImage && value is not null)
-        {
-            ApplyFrontBackgroundFromImage();
-        }
     }
 
     partial void OnBorderThicknessChanged(double value) => RefreshPreviewProperties();
@@ -931,7 +875,7 @@ public partial class MainViewModel : ObservableObject
             FontSize = FontSize,
             FontColor = FontColor,
             BackgroundColor = BackgroundColor,
-            MatchFrontBackgroundToImage = MatchFrontBackgroundToImage,
+            MatchFrontBackgroundToImage = false,
             BorderColor = BorderColor,
             BackFontColor = BackFontColor,
             BackBackgroundColor = BackBackgroundColor,
@@ -974,7 +918,6 @@ public partial class MainViewModel : ObservableObject
         FontSize = design.FontSize <= 0 ? 42 : design.FontSize;
         FontColor = string.IsNullOrWhiteSpace(design.FontColor) ? "#111827" : design.FontColor;
         BackgroundColor = string.IsNullOrWhiteSpace(design.BackgroundColor) ? "#FFFFFF" : design.BackgroundColor;
-        MatchFrontBackgroundToImage = design.MatchFrontBackgroundToImage;
         BorderColor = string.IsNullOrWhiteSpace(design.BorderColor) ? "#1F2937" : design.BorderColor;
         BackFontColor = string.IsNullOrWhiteSpace(design.BackFontColor) ? "#111827" : design.BackFontColor;
         BackBackgroundColor = string.IsNullOrWhiteSpace(design.BackBackgroundColor) ? "#FFFFFF" : design.BackBackgroundColor;
@@ -1031,8 +974,8 @@ public partial class MainViewModel : ObservableObject
                 entry.NameText ?? string.Empty,
                 entry.TitleText ?? string.Empty,
                 entry.CompanyText ?? string.Empty,
-                entry.BackgroundImagePath ?? string.Empty,
-                entry.OverlayImagePath ?? string.Empty,
+                string.Empty,
+                ResolveFrontImagePath(entry),
                 entry.BackContent ?? string.Empty,
                 entry.BackImagePath ?? string.Empty,
                 entry.BackImageWidthMm,
@@ -1123,8 +1066,7 @@ public partial class MainViewModel : ObservableObject
 
     private static bool IsFrontImageProperty(string? propertyName)
     {
-        return propertyName is nameof(NamePlateEntry.BackgroundImagePath)
-            or nameof(NamePlateEntry.OverlayImagePath);
+        return propertyName is nameof(NamePlateEntry.OverlayImagePath);
     }
 
     private static bool IsBackImageProperty(string? propertyName)
@@ -1171,7 +1113,7 @@ public partial class MainViewModel : ObservableObject
 
     private static void CopyFrontImages(NamePlateEntry source, NamePlateEntry target)
     {
-        target.BackgroundImagePath = source.BackgroundImagePath;
+        target.BackgroundImagePath = string.Empty;
         target.OverlayImagePath = source.OverlayImagePath;
     }
 
@@ -1273,8 +1215,8 @@ public partial class MainViewModel : ObservableObject
                     trimText ? name.Trim() : name,
                     trimText ? title.Trim() : title,
                     trimText ? company.Trim() : company,
-                    entry.BackgroundImagePath ?? string.Empty,
-                    entry.OverlayImagePath ?? string.Empty,
+                    string.Empty,
+                    ResolveFrontImagePath(entry),
                     trimText ? (entry.BackContent ?? string.Empty).Trim() : entry.BackContent ?? string.Empty,
                     entry.BackImagePath ?? string.Empty,
                     entry.BackImageWidthMm,
@@ -1420,31 +1362,7 @@ public partial class MainViewModel : ObservableObject
         StatusMessage = $"뒷면 배경색을 그림의 대표 색상 {colorHex}(으)로 적용했습니다.";
     }
 
-    private void ApplyFrontBackgroundFromImage()
-    {
-        var imagePath = SelectedEntry?.BackgroundImagePath;
-        if (string.IsNullOrWhiteSpace(imagePath))
-        {
-            imagePath = SelectedEntry?.OverlayImagePath;
-        }
-
-        if (string.IsNullOrWhiteSpace(imagePath))
-        {
-            StatusMessage = "앞면 배경색을 맞출 이미지를 먼저 선택해주세요.";
-            return;
-        }
-
-        if (!ImageColorHelper.TryGetRepresentativeColor(imagePath, out var colorHex))
-        {
-            StatusMessage = "앞면 이미지에서 배경색을 추출하지 못했습니다.";
-            return;
-        }
-
-        BackgroundColor = colorHex;
-        StatusMessage = $"앞면 배경색을 이미지와 어울리는 색상 {colorHex}로 적용했습니다.";
-    }
-
-    private void SetSelectedEntryImage(bool isBackground)
+    private void SetSelectedEntryImage()
     {
         if (SelectedEntry is null)
         {
@@ -1459,24 +1377,17 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        if (isBackground)
-        {
-            SelectedEntry.BackgroundImagePath = path;
-            if (MatchFrontBackgroundToImage)
-            {
-                ApplyFrontBackgroundFromImage();
-            }
-            StatusMessage = "선택한 항목의 배경 이미지를 변경했습니다.";
-        }
-        else
-        {
-            SelectedEntry.OverlayImagePath = path;
-            if (MatchFrontBackgroundToImage)
-            {
-                ApplyFrontBackgroundFromImage();
-            }
-            StatusMessage = "선택한 항목의 이미지/로고를 변경했습니다.";
-        }
+        SelectedEntry.BackgroundImagePath = string.Empty;
+        SelectedEntry.OverlayImagePath = path;
+        StatusMessage = "선택한 항목의 앞면 그림을 변경했습니다.";
+    }
+
+    // 예전 JSON의 배경 이미지는 통합된 앞면 그림 레이어로 자동 승계합니다.
+    private static string ResolveFrontImagePath(NamePlateEntry entry)
+    {
+        return !string.IsNullOrWhiteSpace(entry.OverlayImagePath)
+            ? entry.OverlayImagePath
+            : entry.BackgroundImagePath ?? string.Empty;
     }
 
     private void PickColor(string targetName, string currentColor, Action<string> applyColor)

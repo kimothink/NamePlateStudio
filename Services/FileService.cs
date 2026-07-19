@@ -18,8 +18,8 @@ public sealed class FileService
     {
         var dialog = new SaveFileDialog
         {
-            Title = "명패 디자인 저장",
-            FileName = "nameplate-design.json",
+            Title = "명패 양식 저장",
+            FileName = "nameplate-template.json",
             DefaultExt = ".json",
             Filter = "JSON 파일 (*.json)|*.json|모든 파일 (*.*)|*.*"
         };
@@ -38,7 +38,7 @@ public sealed class FileService
     {
         var dialog = new OpenFileDialog
         {
-            Title = "명패 디자인 불러오기",
+            Title = "명패 양식 불러오기",
             DefaultExt = ".json",
             Filter = "JSON 파일 (*.json)|*.json|모든 파일 (*.*)|*.*"
         };
