@@ -23,7 +23,7 @@
 !endif
 
 Unicode True
-SetCompressor /SOLID lzma
+SetCompressor /SOLID zlib
 Name "${APP_NAME}"
 OutFile "${OUT_FILE}"
 InstallDir "$LOCALAPPDATA\Programs\${APP_NAME}"
