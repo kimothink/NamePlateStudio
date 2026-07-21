@@ -561,6 +561,28 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void SavePdf()
+    {
+        if (!TryCreateDesign(out var design))
+        {
+            return;
+        }
+
+        if (printService.SavePdf(design!, out var message))
+        {
+            StatusMessage = message;
+        }
+        else if (message != "PDF 저장이 취소되었습니다.")
+        {
+            ShowNotice(message);
+        }
+        else
+        {
+            StatusMessage = message;
+        }
+    }
+
+    [RelayCommand]
     private void Reset()
     {
         ApplyDesign(new NamePlateDesign());

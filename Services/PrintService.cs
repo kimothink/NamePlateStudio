@@ -1,10 +1,14 @@
+using System.Globalization;
+using System.IO;
 using System.Printing;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Markup;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using NamePlateStudio.Helpers;
 using NamePlateStudio.Models;
@@ -16,12 +20,14 @@ using FontFamily = System.Windows.Media.FontFamily;
 using Image = System.Windows.Controls.Image;
 using PrintDialog = System.Windows.Controls.PrintDialog;
 using Rectangle = System.Windows.Shapes.Rectangle;
+using SaveFileDialog = Microsoft.Win32.SaveFileDialog;
 using Size = System.Windows.Size;
 
 namespace NamePlateStudio.Services;
 
 public sealed class PrintService
 {
+    private const double PdfDpi = 300;
     private readonly PrintLayoutService layoutService = new();
 
     public bool Print(NamePlateDesign design, out string message)
@@ -156,6 +162,64 @@ public sealed class PrintService
         window.ShowDialog();
     }
 
+    public bool SavePdf(NamePlateDesign design, out string message)
+    {
+        try
+        {
+            var layout = layoutService.CreateLayout(design);
+            if (!layout.CanFit)
+            {
+                message = "현재 용지 크기, 여백, 간격 안에 명패가 들어가지 않습니다.";
+                return false;
+            }
+
+            var dialog = new SaveFileDialog
+            {
+                Title = "PDF 저장",
+                Filter = "PDF 문서 (*.pdf)|*.pdf",
+                DefaultExt = ".pdf",
+                AddExtension = true,
+                FileName = $"명패-{DateTime.Now:yyyyMMdd-HHmm}.pdf"
+            };
+
+            if (dialog.ShowDialog(Application.Current.MainWindow) != true)
+            {
+                message = "PDF 저장이 취소되었습니다.";
+                return false;
+            }
+
+            return ExportPdf(design, dialog.FileName, out message);
+        }
+        catch (Exception ex)
+        {
+            message = $"PDF 저장 중 오류가 발생했습니다. {ex.Message}";
+            return false;
+        }
+    }
+
+    public bool ExportPdf(NamePlateDesign design, string path, out string message)
+    {
+        try
+        {
+            var layout = layoutService.CreateLayout(design);
+            if (!layout.CanFit)
+            {
+                message = "현재 용지 크기, 여백, 간격 안에 명패가 들어가지 않습니다.";
+                return false;
+            }
+
+            var pages = CreateOutputPages(design, layout).ToList();
+            WritePdf(path, pages, layout.PageWidthMm, layout.PageHeightMm);
+            message = $"PDF 저장 완료: {path}";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            message = $"PDF 저장 중 오류가 발생했습니다. {ex.Message}";
+            return false;
+        }
+    }
+
     private static TextBlock CreatePreviewHeader(NamePlateDesign design, PrintLayout layout)
     {
         var orientation = design.IsLandscape ? "가로" : "세로";
@@ -181,46 +245,141 @@ public sealed class PrintService
         var fixedDocument = new FixedDocument();
         fixedDocument.DocumentPaginator.PageSize = new Size(layout.PageWidthPixels, layout.PageHeightPixels);
 
-        foreach (var pageIndex in layout.PageIndexes)
+        foreach (var page in CreateOutputPages(design, layout))
         {
-            var page = new FixedPage
+            var fixedPage = new FixedPage
             {
                 Width = layout.PageWidthPixels,
                 Height = layout.PageHeightPixels,
                 Background = Brushes.White
             };
-
-            AddPlacedNamePlates(page.Children, design, layout, pageIndex, isBackSide: false);
-
-            page.Measure(new Size(layout.PageWidthPixels, layout.PageHeightPixels));
-            page.Arrange(new Rect(new Size(layout.PageWidthPixels, layout.PageHeightPixels)));
-            page.UpdateLayout();
+            fixedPage.Children.Add(page);
+            PreparePage(fixedPage, layout);
 
             var pageContent = new PageContent();
-            ((IAddChild)pageContent).AddChild(page);
+            ((IAddChild)pageContent).AddChild(fixedPage);
             fixedDocument.Pages.Add(pageContent);
-
-            if (design.IsDoubleSided)
-            {
-                var backPage = new FixedPage
-                {
-                    Width = layout.PageWidthPixels,
-                    Height = layout.PageHeightPixels,
-                    Background = Brushes.White
-                };
-                AddPlacedNamePlates(backPage.Children, design, layout, pageIndex, isBackSide: true);
-                backPage.Measure(new Size(layout.PageWidthPixels, layout.PageHeightPixels));
-                backPage.Arrange(new Rect(new Size(layout.PageWidthPixels, layout.PageHeightPixels)));
-                backPage.UpdateLayout();
-
-                var backPageContent = new PageContent();
-                ((IAddChild)backPageContent).AddChild(backPage);
-                fixedDocument.Pages.Add(backPageContent);
-            }
         }
 
         return fixedDocument;
     }
+
+    private static IEnumerable<Canvas> CreateOutputPages(NamePlateDesign design, PrintLayout layout)
+    {
+        foreach (var pageIndex in layout.PageIndexes)
+        {
+            yield return CreatePaperPage(design, layout, pageIndex, showPaperGuide: false, isBackSide: false);
+            if (design.IsDoubleSided)
+            {
+                yield return CreatePaperPage(design, layout, pageIndex, showPaperGuide: false, isBackSide: true);
+            }
+        }
+    }
+
+    private static void PreparePage(FrameworkElement page, PrintLayout layout)
+    {
+        var size = new Size(layout.PageWidthPixels, layout.PageHeightPixels);
+        page.Measure(size);
+        page.Arrange(new Rect(size));
+        page.UpdateLayout();
+    }
+
+    private static void WritePdf(string path, IReadOnlyList<Canvas> pages, double pageWidthMm, double pageHeightMm)
+    {
+        var renderedPages = pages.Select(RenderPageAsJpeg).ToList();
+        var pageWidthPoints = pageWidthMm / 25.4 * 72.0;
+        var pageHeightPoints = pageHeightMm / 25.4 * 72.0;
+        var pageObjectNumbers = Enumerable.Range(0, pages.Count).Select(index => 3 + index * 3).ToArray();
+        var objectCount = 2 + pages.Count * 3;
+
+        using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
+        var offsets = new long[objectCount + 1];
+        WriteAscii(stream, "%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");
+
+        WriteObject(stream, offsets, 1, "<< /Type /Catalog /Pages 2 0 R >>");
+        WriteObject(stream, offsets, 2,
+            $"<< /Type /Pages /Count {pages.Count} /Kids [{string.Join(' ', pageObjectNumbers.Select(number => $"{number} 0 R"))}] >>");
+
+        for (var index = 0; index < renderedPages.Count; index++)
+        {
+            var pageObject = 3 + index * 3;
+            var imageObject = pageObject + 1;
+            var contentObject = pageObject + 2;
+            var renderedPage = renderedPages[index];
+
+            WriteObject(stream, offsets, pageObject,
+                $"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {FormatPdfNumber(pageWidthPoints)} {FormatPdfNumber(pageHeightPoints)}] " +
+                $"/Resources << /XObject << /Im0 {imageObject} 0 R >> >> /Contents {contentObject} 0 R >>");
+
+            WriteStreamObject(stream, offsets, imageObject,
+                $"/Type /XObject /Subtype /Image /Width {renderedPage.PixelWidth} /Height {renderedPage.PixelHeight} " +
+                "/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode",
+                renderedPage.Data);
+
+            var content = Encoding.ASCII.GetBytes(
+                $"q {FormatPdfNumber(pageWidthPoints)} 0 0 {FormatPdfNumber(pageHeightPoints)} 0 0 cm /Im0 Do Q\n");
+            WriteStreamObject(stream, offsets, contentObject, string.Empty, content);
+        }
+
+        var xrefOffset = stream.Position;
+        WriteAscii(stream, $"xref\n0 {objectCount + 1}\n0000000000 65535 f \n");
+        for (var objectNumber = 1; objectNumber <= objectCount; objectNumber++)
+        {
+            WriteAscii(stream, $"{offsets[objectNumber]:D10} 00000 n \n");
+        }
+
+        WriteAscii(stream, $"trailer\n<< /Size {objectCount + 1} /Root 1 0 R >>\nstartxref\n{xrefOffset}\n%%EOF\n");
+    }
+
+    private static RenderedPdfPage RenderPageAsJpeg(Canvas page)
+    {
+        var scale = PdfDpi / 96.0;
+        var pixelWidth = Math.Max(1, (int)Math.Round(page.Width * scale));
+        var pixelHeight = Math.Max(1, (int)Math.Round(page.Height * scale));
+        var size = new Size(page.Width, page.Height);
+        page.Measure(size);
+        page.Arrange(new Rect(size));
+        page.UpdateLayout();
+
+        var bitmap = new RenderTargetBitmap(pixelWidth, pixelHeight, PdfDpi, PdfDpi, PixelFormats.Pbgra32);
+        var visual = new DrawingVisual();
+        using (var context = visual.RenderOpen())
+        {
+            context.DrawRectangle(Brushes.White, null, new Rect(size));
+            context.DrawRectangle(new VisualBrush(page), null, new Rect(size));
+        }
+        bitmap.Render(visual);
+
+        var encoder = new JpegBitmapEncoder { QualityLevel = 95 };
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using var memory = new MemoryStream();
+        encoder.Save(memory);
+        return new RenderedPdfPage(pixelWidth, pixelHeight, memory.ToArray());
+    }
+
+    private static void WriteObject(Stream stream, long[] offsets, int objectNumber, string body)
+    {
+        offsets[objectNumber] = stream.Position;
+        WriteAscii(stream, $"{objectNumber} 0 obj\n{body}\nendobj\n");
+    }
+
+    private static void WriteStreamObject(Stream stream, long[] offsets, int objectNumber, string dictionary, byte[] data)
+    {
+        offsets[objectNumber] = stream.Position;
+        WriteAscii(stream, $"{objectNumber} 0 obj\n<< {dictionary} /Length {data.Length} >>\nstream\n");
+        stream.Write(data, 0, data.Length);
+        WriteAscii(stream, "\nendstream\nendobj\n");
+    }
+
+    private static void WriteAscii(Stream stream, string value)
+    {
+        var bytes = Encoding.Latin1.GetBytes(value);
+        stream.Write(bytes, 0, bytes.Length);
+    }
+
+    private static string FormatPdfNumber(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
+
+    private sealed record RenderedPdfPage(int PixelWidth, int PixelHeight, byte[] Data);
 
     private static Canvas CreatePaperPage(NamePlateDesign design, PrintLayout layout, int pageIndex, bool showPaperGuide, bool isBackSide)
     {

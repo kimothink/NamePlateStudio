@@ -627,9 +627,10 @@
                             <Button Content="양식 저장" Command="{Binding SaveCommand}" />
                             <Button Content="양식 불러오기" Command="{Binding LoadCommand}" Margin="8,4,0,0" Style="{StaticResource SecondaryButtonStyle}" />
                             <Button Content="미리보기" Command="{Binding PreviewCommand}" Style="{StaticResource SecondaryButtonStyle}" />
-                            <Button Content="인쇄" Command="{Binding PrintCommand}" Margin="8,4,0,0" />
-                            <Button Content="초기화" Command="{Binding ResetCommand}" Style="{StaticResource SecondaryButtonStyle}" />
-                            <Button Content="종료" Click="ExitButton_Click" Margin="8,4,0,0" Style="{StaticResource SecondaryButtonStyle}" />
+                            <Button Content="PDF 저장" Command="{Binding SavePdfCommand}" Margin="8,4,0,0" />
+                            <Button Content="인쇄" Command="{Binding PrintCommand}" />
+                            <Button Content="초기화" Command="{Binding ResetCommand}" Margin="8,4,0,0" Style="{StaticResource SecondaryButtonStyle}" />
+                            <Button Content="종료" Click="ExitButton_Click" Style="{StaticResource SecondaryButtonStyle}" />
                         </UniformGrid>
                     </StackPanel>
                 </ScrollViewer>
