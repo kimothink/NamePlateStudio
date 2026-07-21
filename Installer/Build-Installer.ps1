@@ -32,6 +32,10 @@ if (-not $makeNsis) {
     throw "NSIS makensis.exe를 찾을 수 없습니다. NSIS를 설치한 뒤 다시 실행해주세요."
 }
 
+if (Test-Path -LiteralPath $publishDir) {
+    Remove-Item -LiteralPath $publishDir -Recurse -Force
+}
+
 New-Item -ItemType Directory -Force -Path $publishDir, $distDir | Out-Null
 
 & $iconScript
@@ -55,6 +59,13 @@ if ($FrameworkDependent) {
 }
 
 dotnet @publishArgs
+if ($LASTEXITCODE -ne 0) {
+    throw "dotnet publish에 실패했습니다. 종료 코드: $LASTEXITCODE"
+}
+
+if (Test-Path -LiteralPath $outFile) {
+    Remove-Item -LiteralPath $outFile -Force
+}
 
 & $makeNsis `
     "/DAPP_VERSION=$Version" `
@@ -63,6 +74,10 @@ dotnet @publishArgs
     "/DUNICON_FILE=$uniconFile" `
     "/DOUT_FILE=$outFile" `
     $nsiPath
+
+if ($LASTEXITCODE -ne 0) {
+    throw "NSIS 설치 파일 생성에 실패했습니다. 종료 코드: $LASTEXITCODE"
+}
 
 if (-not (Test-Path $outFile)) {
     throw "NSIS 설치 파일 생성에 실패했습니다: $outFile"
