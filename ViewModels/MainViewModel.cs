@@ -538,7 +538,20 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        if (printService.Print(design!, out var message))
+        var printableEntries = Entries
+            .Where(entry => !string.IsNullOrWhiteSpace(entry.NameText))
+            .ToList();
+        var selectedEntryIndex = SelectedEntry is null
+            ? -1
+            : printableEntries.IndexOf(SelectedEntry);
+        var currentOutputPageIndex = PreviewPageIndex * (IsDoubleSided ? 2 : 1)
+            + (IsDoubleSided && IsPreviewingBack ? 1 : 0);
+
+        if (printService.Print(
+                design!,
+                currentOutputPageIndex,
+                selectedEntryIndex >= 0 ? selectedEntryIndex : null,
+                out var message))
         {
             StatusMessage = message;
         }

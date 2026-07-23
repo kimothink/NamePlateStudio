@@ -30,7 +30,11 @@ public sealed class PrintService
     private const double PdfDpi = 300;
     private readonly PrintLayoutService layoutService = new();
 
-    public bool Print(NamePlateDesign design, out string message)
+    public bool Print(
+        NamePlateDesign design,
+        int currentOutputPageIndex,
+        int? selectedEntryIndex,
+        out string message)
     {
         try
         {
@@ -44,6 +48,12 @@ public sealed class PrintService
             var dialog = new PrintDialog();
             dialog.PrintTicket.PageMediaSize = new PageMediaSize(layout.PageWidthPixels, layout.PageHeightPixels);
             dialog.PrintTicket.PageOrientation = design.IsLandscape ? PageOrientation.Landscape : PageOrientation.Portrait;
+            var outputPageCount = GetOutputPageCount(design, layout);
+            dialog.MinPage = 1;
+            dialog.MaxPage = (uint)Math.Max(1, outputPageCount);
+            dialog.UserPageRangeEnabled = outputPageCount > 1;
+            dialog.CurrentPageEnabled = true;
+            dialog.SelectedPagesEnabled = selectedEntryIndex.HasValue;
             if (design.IsDoubleSided)
             {
                 dialog.PrintTicket.Duplexing = Duplexing.TwoSidedLongEdge;
@@ -55,16 +65,24 @@ public sealed class PrintService
                 return false;
             }
 
-            var document = CreateFixedDocument(design, layout);
+            var printSelection = GetPrintSelection(
+                dialog,
+                design,
+                layout,
+                outputPageCount,
+                currentOutputPageIndex,
+                selectedEntryIndex);
+            var document = CreateFixedDocument(design, layout, printSelection);
             dialog.PrintDocument(document.DocumentPaginator, "NamePlateStudio 명패");
 
+            var selectedPageCount = printSelection.OutputPageIndexes.Count;
             if (design.IsDoubleSided)
             {
-                message = $"양면 {layout.PageCount}장(인쇄면 {layout.PageCount * 2}페이지), 총 {layout.Placements.Count}개 명찰을 인쇄 작업으로 보냈습니다.";
+                message = $"선택한 인쇄면 {selectedPageCount}페이지를 양면 인쇄 작업으로 보냈습니다.";
                 return true;
             }
 
-            message = $"{layout.PageCount}페이지, 총 {layout.Placements.Count}명 명패를 인쇄 작업으로 보냈습니다.";
+            message = $"선택한 {selectedPageCount}페이지를 인쇄 작업으로 보냈습니다.";
             return true;
         }
         catch (PrintQueueException ex)
@@ -99,11 +117,13 @@ public sealed class PrintService
         }
         else
         {
+            var outputPageCount = GetOutputPageCount(design, layout);
             foreach (var pageIndex in layout.PageIndexes)
             {
+                var frontOutputPage = pageIndex * (design.IsDoubleSided ? 2 : 1) + 1;
                 content.Children.Add(new TextBlock
                 {
-                    Text = $"{pageIndex + 1} / {layout.PageCount} 앞면",
+                    Text = $"인쇄 페이지 {frontOutputPage} / {outputPageCount} · 용지 {pageIndex + 1} 앞면",
                     Margin = new Thickness(0, pageIndex == 0 ? 0 : 22, 0, 8),
                     FontWeight = FontWeights.SemiBold,
                     Foreground = Brushes.White
@@ -120,7 +140,7 @@ public sealed class PrintService
                 {
                     content.Children.Add(new TextBlock
                     {
-                        Text = $"{pageIndex + 1} / {layout.PageCount} 뒷면",
+                        Text = $"인쇄 페이지 {frontOutputPage + 1} / {outputPageCount} · 용지 {pageIndex + 1} 뒷면",
                         Margin = new Thickness(0, 12, 0, 8),
                         FontWeight = FontWeights.SemiBold,
                         Foreground = Brushes.White
@@ -240,12 +260,16 @@ public sealed class PrintService
         return header;
     }
 
-    private static FixedDocument CreateFixedDocument(NamePlateDesign design, PrintLayout layout)
+    private static FixedDocument CreateFixedDocument(
+        NamePlateDesign design,
+        PrintLayout layout,
+        PrintSelection selection)
     {
         var fixedDocument = new FixedDocument();
         fixedDocument.DocumentPaginator.PageSize = new Size(layout.PageWidthPixels, layout.PageHeightPixels);
 
-        foreach (var page in CreateOutputPages(design, layout))
+        foreach (var page in CreateOutputPages(design, layout, selection.CopyNumber)
+                     .Where((_, index) => selection.OutputPageIndexes.Contains(index)))
         {
             var fixedPage = new FixedPage
             {
@@ -264,14 +288,55 @@ public sealed class PrintService
         return fixedDocument;
     }
 
-    private static IEnumerable<Canvas> CreateOutputPages(NamePlateDesign design, PrintLayout layout)
+    private static int GetOutputPageCount(NamePlateDesign design, PrintLayout layout)
+        => layout.PageCount * (design.IsDoubleSided ? 2 : 1);
+
+    private static PrintSelection GetPrintSelection(
+        PrintDialog dialog,
+        NamePlateDesign design,
+        PrintLayout layout,
+        int outputPageCount,
+        int currentOutputPageIndex,
+        int? selectedEntryIndex)
+    {
+        if (dialog.PageRangeSelection == PageRangeSelection.CurrentPage)
+        {
+            var currentPage = Math.Clamp(currentOutputPageIndex, 0, outputPageCount - 1);
+            return new PrintSelection(new HashSet<int> { currentPage });
+        }
+
+        if (dialog.PageRangeSelection == PageRangeSelection.SelectedPages && selectedEntryIndex.HasValue)
+        {
+            var copyNumber = selectedEntryIndex.Value + 1;
+            var placement = layout.Placements.FirstOrDefault(item => item.CopyNumber == copyNumber);
+            if (placement is not null)
+            {
+                var sidesPerPage = design.IsDoubleSided ? 2 : 1;
+                var firstOutputPage = placement.PageIndex * sidesPerPage;
+                var outputPages = Enumerable.Range(firstOutputPage, sidesPerPage).ToHashSet();
+                return new PrintSelection(outputPages, copyNumber);
+            }
+        }
+
+        if (dialog.PageRangeSelection == PageRangeSelection.UserPages)
+        {
+            var firstPage = Math.Clamp(dialog.PageRange.PageFrom, 1, outputPageCount);
+            var lastPage = Math.Clamp(dialog.PageRange.PageTo, firstPage, outputPageCount);
+            var outputPages = Enumerable.Range(firstPage - 1, lastPage - firstPage + 1).ToHashSet();
+            return new PrintSelection(outputPages);
+        }
+
+        return new PrintSelection(Enumerable.Range(0, outputPageCount).ToHashSet());
+    }
+
+    private static IEnumerable<Canvas> CreateOutputPages(NamePlateDesign design, PrintLayout layout, int? copyNumber = null)
     {
         foreach (var pageIndex in layout.PageIndexes)
         {
-            yield return CreatePaperPage(design, layout, pageIndex, showPaperGuide: false, isBackSide: false);
+            yield return CreatePaperPage(design, layout, pageIndex, showPaperGuide: false, isBackSide: false, copyNumber);
             if (design.IsDoubleSided)
             {
-                yield return CreatePaperPage(design, layout, pageIndex, showPaperGuide: false, isBackSide: true);
+                yield return CreatePaperPage(design, layout, pageIndex, showPaperGuide: false, isBackSide: true, copyNumber);
             }
         }
     }
@@ -381,7 +446,15 @@ public sealed class PrintService
 
     private sealed record RenderedPdfPage(int PixelWidth, int PixelHeight, byte[] Data);
 
-    private static Canvas CreatePaperPage(NamePlateDesign design, PrintLayout layout, int pageIndex, bool showPaperGuide, bool isBackSide)
+    private sealed record PrintSelection(IReadOnlySet<int> OutputPageIndexes, int? CopyNumber = null);
+
+    private static Canvas CreatePaperPage(
+        NamePlateDesign design,
+        PrintLayout layout,
+        int pageIndex,
+        bool showPaperGuide,
+        bool isBackSide,
+        int? copyNumber = null)
     {
         var page = new Canvas
         {
@@ -412,18 +485,28 @@ public sealed class PrintService
             Canvas.SetTop(page.Children[^1], layout.MarginPixels);
         }
 
-        AddPlacedNamePlates(page.Children, design, layout, pageIndex, isBackSide);
+        AddPlacedNamePlates(page.Children, design, layout, pageIndex, isBackSide, copyNumber);
         return page;
     }
 
-    private static void AddPlacedNamePlates(UIElementCollection pageChildren, NamePlateDesign design, PrintLayout layout, int pageIndex, bool isBackSide)
+    private static void AddPlacedNamePlates(
+        UIElementCollection pageChildren,
+        NamePlateDesign design,
+        PrintLayout layout,
+        int pageIndex,
+        bool isBackSide,
+        int? copyNumber)
     {
-        foreach (var placement in layout.Placements.Where(item => item.PageIndex == pageIndex))
+        foreach (var placement in layout.Placements.Where(item =>
+                     item.PageIndex == pageIndex && (!copyNumber.HasValue || item.CopyNumber == copyNumber.Value)))
         {
             var plate = isBackSide
                 ? CreateBackNamePlateElement(design, placement.Entry, showOutputGuide: true)
                 : CreateNamePlateElement(design, placement.Entry, showOutputGuide: true);
-            Canvas.SetLeft(plate, placement.LeftPixels);
+            var left = isBackSide
+                ? layout.PageWidthPixels - placement.LeftPixels - placement.WidthPixels
+                : placement.LeftPixels;
+            Canvas.SetLeft(plate, left);
             Canvas.SetTop(plate, placement.TopPixels);
             pageChildren.Add(plate);
         }
