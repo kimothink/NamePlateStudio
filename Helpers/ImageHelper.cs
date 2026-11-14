@@ -6,6 +6,22 @@ namespace NamePlateStudio.Helpers;
 
 public static class ImageHelper
 {
+    public static System.Windows.Size? GetInitialImageSizeMm(string imagePath, double maxWidthMm, double maxHeightMm)
+    {
+        var source = CreateImageSource(imagePath);
+        if (source is null || maxWidthMm <= 0 || maxHeightMm <= 0)
+        {
+            return null;
+        }
+
+        var width = UnitConverter.PixelsToMillimeters(source.Width);
+        var height = UnitConverter.PixelsToMillimeters(source.Height);
+        var scale = Math.Min(1, Math.Min(maxWidthMm / width, maxHeightMm / height));
+        return double.IsFinite(scale) && scale > 0
+            ? new System.Windows.Size(width * scale, height * scale)
+            : null;
+    }
+
     public static ImageSource? CreateImageSource(string? imagePath)
     {
         if (string.IsNullOrWhiteSpace(imagePath) || !File.Exists(imagePath))

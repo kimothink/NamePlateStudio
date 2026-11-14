@@ -247,7 +247,7 @@ public partial class MainViewModel : ObservableObject
 
     public string PaperSizeText => $"{EffectivePaperWidthMm:0.##} mm x {EffectivePaperHeightMm:0.##} mm";
 
-    public string EntryCountText => $"{GetPrintableEntries(trimText: false).Count}명";
+    public string EntryCountText => $"{Entries.Count}명";
 
     public string ZoomPercentText => $"{Zoom * 100:0}%";
 
@@ -279,6 +279,7 @@ public partial class MainViewModel : ObservableObject
         var entry = new NamePlateEntry("새 항목", string.Empty, string.Empty);
         Entries.Add(entry);
         SelectedEntry = entry;
+        PreviewPageIndex = PreviewPageCount - 1;
         StatusMessage = "명패 항목을 추가했습니다.";
     }
 
@@ -322,7 +323,7 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        var editor = new BackEditorWindow(entry, Entries)
+        var editor = new BackEditorWindow(entry, Entries, WidthMm, HeightMm)
         {
             Owner = System.Windows.Application.Current.MainWindow
         };
@@ -379,6 +380,18 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void FitFrontImageOriginal()
+    {
+        if (!FitFrontImageToOriginal())
+        {
+            StatusMessage = "원본 크기를 맞출 앞면 그림을 먼저 선택해주세요.";
+            return;
+        }
+
+        StatusMessage = "앞면 그림의 원본 비율을 유지하며 전체가 보이도록 맞췄습니다.";
+    }
+
+    [RelayCommand]
     private void SelectEntryBackImage()
     {
         if (SelectedEntry is null)
@@ -394,14 +407,24 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
+        if (ImageHelper.GetInitialImageSizeMm(path, WidthMm, HeightMm) is not { } size)
+        {
+            ShowError("뒷면 이미지를 불러올 수 없습니다.");
+            return;
+        }
+
+        SelectedEntry.BackImageWidthMm = size.Width;
+        SelectedEntry.BackImageHeightMm = size.Height;
+        SelectedEntry.BackImageX = (WidthMm - size.Width) / 2;
+        SelectedEntry.BackImageY = (HeightMm - size.Height) / 2;
+        SelectedEntry.BackImageRotation = 0;
         SelectedEntry.BackImagePath = path;
-        FitBackImageToOriginal(SelectedEntry);
         if (MatchBackBackgroundToImage)
         {
             ApplyBackBackgroundFromImage();
         }
         IsDoubleSided = true;
-        StatusMessage = "뒷면 이미지를 원본 전체가 보이는 크기로 넣었습니다.";
+        StatusMessage = "뒷면 이미지를 넣었습니다.";
     }
 
     [RelayCommand]
@@ -827,7 +850,7 @@ public partial class MainViewModel : ObservableObject
         var entries = GetPrintableEntries(trimText: true);
         if (entries.Count == 0)
         {
-            ShowNotice("명패 내용 목록에 표시명을 1개 이상 입력해주세요.");
+            ShowNotice("명패 항목을 1개 이상 추가해주세요.");
             return false;
         }
 
@@ -1206,7 +1229,7 @@ public partial class MainViewModel : ObservableObject
     {
         PreviewPlacements.Clear();
 
-        var entryCount = GetPrintableEntries(trimText: false).Count;
+        var entryCount = Entries.Count;
         if (entryCount == 0)
         {
             PreviewPageCount = 1;
@@ -1215,7 +1238,7 @@ public partial class MainViewModel : ObservableObject
                 PreviewPageIndex = 0;
                 return;
             }
-            LayoutSummaryText = "명패 내용 목록에 표시명을 입력해주세요.";
+            LayoutSummaryText = "명패 항목을 추가해주세요.";
             return;
         }
 
@@ -1263,7 +1286,6 @@ public partial class MainViewModel : ObservableObject
                     entry.BackImageY,
                     entry.BackImageRotation);
             })
-            .Where(entry => !string.IsNullOrWhiteSpace(entry.NameText))
             .ToList();
     }
 
@@ -1379,6 +1401,35 @@ public partial class MainViewModel : ObservableObject
         return true;
     }
 
+    private bool FitFrontImageToOriginal()
+    {
+        if (SelectedEntry is null)
+        {
+            return false;
+        }
+
+        var imageSource = ImageHelper.CreateImageSource(ResolveFrontImagePath(SelectedEntry));
+        if (imageSource is null || imageSource.Width <= 0 || imageSource.Height <= 0 || WidthMm <= 0 || HeightMm <= 0)
+        {
+            return false;
+        }
+
+        var scale = Math.Min(WidthMm / imageSource.Width, HeightMm / imageSource.Height);
+        if (!double.IsFinite(scale) || scale <= 0)
+        {
+            return false;
+        }
+
+        var width = imageSource.Width * scale;
+        var height = imageSource.Height * scale;
+        OverlayImageWidth = Math.Round(width, 2);
+        OverlayImageHeight = Math.Round(height, 2);
+        OverlayImageX = Math.Round((WidthMm - width) / 2, 2);
+        OverlayImageY = Math.Round((HeightMm - height) / 2, 2);
+        OverlayImageRotation = 0;
+        return true;
+    }
+
     private void ApplyBackBackgroundFromImage()
     {
         if (SelectedEntry is null || string.IsNullOrWhiteSpace(SelectedEntry.BackImagePath))
@@ -1412,9 +1463,20 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
+        if (ImageHelper.GetInitialImageSizeMm(path, WidthMm, HeightMm) is not { } size)
+        {
+            ShowError("앞면 이미지를 불러올 수 없습니다.");
+            return;
+        }
+
+        OverlayImageWidth = size.Width;
+        OverlayImageHeight = size.Height;
+        OverlayImageX = (WidthMm - size.Width) / 2;
+        OverlayImageY = (HeightMm - size.Height) / 2;
+        OverlayImageRotation = 0;
         SelectedEntry.BackgroundImagePath = string.Empty;
         SelectedEntry.OverlayImagePath = path;
-        StatusMessage = "선택한 항목의 앞면 그림을 변경했습니다.";
+        StatusMessage = "앞면 이미지를 넣었습니다.";
     }
 
     // 예전 JSON의 배경 이미지는 통합된 앞면 그림 레이어로 자동 승계합니다.

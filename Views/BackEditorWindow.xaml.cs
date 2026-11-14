@@ -13,15 +13,20 @@ public partial class BackEditorWindow : Window
 {
     private readonly NamePlateEntry target;
     private readonly ObservableCollection<NamePlateEntry> entries;
+    private readonly double plateWidthMm;
+    private readonly double plateHeightMm;
     private DataTable table = new();
+    private bool imageImported;
 
     public bool AppliedToAll { get; private set; }
 
-    public BackEditorWindow(NamePlateEntry target, ObservableCollection<NamePlateEntry> entries)
+    public BackEditorWindow(NamePlateEntry target, ObservableCollection<NamePlateEntry> entries, double plateWidthMm, double plateHeightMm)
     {
         InitializeComponent();
         this.target = target;
         this.entries = entries;
+        this.plateWidthMm = plateWidthMm;
+        this.plateHeightMm = plateHeightMm;
         TitleText.Text = $"{target.NameText} - 뒷면 편집";
         BackTextBox.Text = target.BackContent;
         ImagePathTextBox.Text = target.BackImagePath;
@@ -36,15 +41,27 @@ public partial class BackEditorWindow : Window
     private void SelectImage_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new Microsoft.Win32.OpenFileDialog { Filter = "이미지 파일|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.webp|모든 파일|*.*" };
-        if (dialog.ShowDialog(this) == true)
+        if (dialog.ShowDialog(this) != true)
         {
-            ImagePathTextBox.Text = dialog.FileName;
-            RefreshImagePreview();
+            return;
         }
+
+        if (ImageHelper.GetInitialImageSizeMm(dialog.FileName, plateWidthMm, plateHeightMm) is not { } size)
+        {
+            System.Windows.MessageBox.Show(this, "뒷면 이미지를 불러올 수 없습니다.", "뒷면 편집");
+            return;
+        }
+
+        imageImported = true;
+        ImageWidthTextBox.Text = size.Width.ToString(CultureInfo.CurrentCulture);
+        ImageHeightTextBox.Text = size.Height.ToString(CultureInfo.CurrentCulture);
+        ImagePathTextBox.Text = dialog.FileName;
+        RefreshImagePreview();
     }
 
     private void ClearImage_Click(object sender, RoutedEventArgs e)
     {
+        imageImported = false;
         ImagePathTextBox.Clear();
         RefreshImagePreview();
     }
@@ -156,9 +173,15 @@ public partial class BackEditorWindow : Window
     private void Apply(NamePlateEntry entry, double width, double height, int rows, int columns, List<string> cells)
     {
         entry.BackContent = BackTextBox.Text ?? string.Empty;
-        entry.BackImagePath = ImagePathTextBox.Text ?? string.Empty;
         entry.BackImageWidthMm = width;
         entry.BackImageHeightMm = height;
+        if (imageImported)
+        {
+            entry.BackImageX = (plateWidthMm - width) / 2;
+            entry.BackImageY = (plateHeightMm - height) / 2;
+            entry.BackImageRotation = 0;
+        }
+        entry.BackImagePath = ImagePathTextBox.Text ?? string.Empty;
         entry.BackTableRows = rows;
         entry.BackTableColumns = columns;
         entry.BackTableCells = cells.ToList();

@@ -104,7 +104,6 @@ public sealed class PrintLayoutService
     private static List<NamePlateEntry> GetPrintableEntries(NamePlateDesign design)
     {
         var entries = (design.Entries ?? [])
-            .Where(entry => !string.IsNullOrWhiteSpace(entry.NameText))
             .Select(entry => new NamePlateEntry(
                 (entry.NameText ?? string.Empty).Trim(),
                 (entry.TitleText ?? string.Empty).Trim(),

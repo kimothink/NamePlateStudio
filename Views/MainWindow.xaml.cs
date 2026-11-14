@@ -422,7 +422,7 @@ public partial class MainWindow : Window
     {
         const double MinimumImageSizeMm = 5;
 
-        if (IsCornerHandle(handle) && width > 0 && height > 0)
+        if ((IsCornerHandle(handle) || viewModel.LockImageAspectRatio) && width > 0 && height > 0)
         {
             ResizePreviewImageProportionally(
                 viewModel, entry, isBackImage, handle, deltaWidthMm, deltaHeightMm,
@@ -477,10 +477,12 @@ public partial class MainWindow : Window
         double rotation,
         double minimumImageSizeMm)
     {
-        var movesLeft = handle is ResizeHandle.TopLeft or ResizeHandle.BottomLeft;
-        var movesTop = handle is ResizeHandle.TopLeft or ResizeHandle.TopRight;
-        var widthChange = movesLeft ? -deltaWidthMm : deltaWidthMm;
-        var heightChange = movesTop ? -deltaHeightMm : deltaHeightMm;
+        var movesLeft = handle is ResizeHandle.Left or ResizeHandle.TopLeft or ResizeHandle.BottomLeft;
+        var movesRight = handle is ResizeHandle.Right or ResizeHandle.TopRight or ResizeHandle.BottomRight;
+        var movesTop = handle is ResizeHandle.Top or ResizeHandle.TopLeft or ResizeHandle.TopRight;
+        var movesBottom = handle is ResizeHandle.Bottom or ResizeHandle.BottomLeft or ResizeHandle.BottomRight;
+        var widthChange = movesLeft ? -deltaWidthMm : movesRight ? deltaWidthMm : 0;
+        var heightChange = movesTop ? -deltaHeightMm : movesBottom ? deltaHeightMm : 0;
         var relativeWidthChange = widthChange / width;
         var relativeHeightChange = heightChange / height;
         var requestedScale = 1 + (Math.Abs(relativeWidthChange) >= Math.Abs(relativeHeightChange)
@@ -497,7 +499,7 @@ public partial class MainWindow : Window
         var newHeight = height * scale;
         var anchoredPosition = GetAnchoredResizePosition(
             x, y, width, height, newWidth, newHeight, rotation,
-            movesLeft, movesTop, !movesLeft, !movesTop);
+            movesLeft, movesTop, movesRight, movesBottom);
 
         ApplyPreviewImagePlacement(
             viewModel, entry, isBackImage,

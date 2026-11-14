@@ -608,8 +608,8 @@ public sealed class PrintService
             var image = new Image
             {
                 Source = backImage,
-                Width = UnitConverter.MillimetersToPixels(Math.Max(1, entry.BackImageWidthMm)),
-                Height = UnitConverter.MillimetersToPixels(Math.Max(1, entry.BackImageHeightMm)),
+                Width = UnitConverter.MillimetersToPixels(entry.BackImageWidthMm > 0 ? entry.BackImageWidthMm : 1),
+                Height = UnitConverter.MillimetersToPixels(entry.BackImageHeightMm > 0 ? entry.BackImageHeightMm : 1),
                 Stretch = Stretch.Uniform,
                 RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
                 RenderTransform = new RotateTransform(entry.BackImageRotation)
