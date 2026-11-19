@@ -143,6 +143,7 @@ public partial class MainWindow : Window
         }
 
         viewModel.SelectedEntry = placement.Entry;
+        element.Focus();
         var isBackImage = IsBackImageElement(element);
         selectedPreviewImage = new SelectedPreviewImage(placement.Entry, isBackImage);
         var startPoint = e.GetPosition(parentCanvas);
@@ -630,10 +631,8 @@ public partial class MainWindow : Window
     {
         if (isBackImage)
         {
-            entry.BackImageX = 0;
-            entry.BackImageY = 0;
-            entry.BackImageWidthMm = Math.Max(1, viewModel.WidthMm);
-            entry.BackImageHeightMm = Math.Max(1, viewModel.HeightMm);
+            viewModel.SelectedEntry = entry;
+            viewModel.FillBackImageCommand.Execute(null);
         }
         else
         {

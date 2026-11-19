@@ -305,7 +305,7 @@
                             <Button Content="크게" Command="{Binding ScaleFrontImageCommand}" CommandParameter="1.1" Margin="8,4,0,0" Style="{StaticResource SecondaryButtonStyle}" />
                             <Button Content="원본 전체"
                                     Command="{Binding FitFrontImageOriginalCommand}"
-                                    Margin="8,4,0,0"
+                                    Margin="0,4,0,0"
                                     Style="{StaticResource SecondaryButtonStyle}"
                                     ToolTip="원본 비율을 유지하며 명패 안에 전체 그림을 맞춥니다." />
                             <Button Content="배경으로 꽉 채우기"
@@ -355,10 +355,11 @@
                                     Style="{StaticResource SecondaryButtonStyle}" />
                         </Grid>
 
-                        <UniformGrid Columns="3" Margin="0,8,0,0">
+                        <UniformGrid Columns="2" Margin="0,8,0,0">
                             <Button Content="작게" Command="{Binding ScaleBackImageCommand}" CommandParameter="0.9" Style="{StaticResource SecondaryButtonStyle}" />
                             <Button Content="크게" Command="{Binding ScaleBackImageCommand}" CommandParameter="1.1" Margin="8,4,0,0" Style="{StaticResource SecondaryButtonStyle}" />
-                            <Button Content="원본 전체" Command="{Binding FitBackImageCommand}" Margin="8,4,0,0" Style="{StaticResource SecondaryButtonStyle}" />
+                            <Button Content="원본 전체" Command="{Binding FitBackImageCommand}" Margin="0,4,0,0" Style="{StaticResource SecondaryButtonStyle}" />
+                            <Button Content="배경으로 꽉 채우기" Command="{Binding FillBackImageCommand}" Margin="8,4,0,0" Style="{StaticResource SecondaryButtonStyle}" />
                         </UniformGrid>
 
                         <TextBlock Margin="0,10,0,0"
@@ -627,6 +628,12 @@
                             </StackPanel>
                         </Grid>
 
+                        <StackPanel Visibility="{Binding IsDoubleSided, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <TextBlock Text="뒷면 인쇄 가로 보정(mm)" Style="{StaticResource FieldLabelStyle}" />
+                            <TextBox Text="{Binding BackPrintOffsetXMm}"
+                                     ToolTip="뒷면을 바라볼 때 오른쪽으로 이동하려면 양수, 왼쪽으로 이동하려면 음수를 입력하세요." />
+                        </StackPanel>
+
                         <TextBlock Text="{Binding LayoutSummaryText}"
                                    Margin="0,10,0,0"
                                    TextWrapping="Wrap"
@@ -805,6 +812,7 @@
                                                           Visibility="{Binding Entry.OverlayImagePath, Converter={StaticResource StringNotEmptyToVisibilityConverter}}"
                                                           Background="Transparent"
                                                           Tag="FrontOverlay"
+                                                          Focusable="True"
                                                           Panel.ZIndex="0"
                                                           Cursor="SizeAll"
                                                           RenderTransformOrigin="0.5,0.5"
@@ -1059,6 +1067,7 @@
                                                           Visibility="{Binding Entry.BackImagePath, Converter={StaticResource StringNotEmptyToVisibilityConverter}}"
                                                           Background="Transparent"
                                                           Tag="BackImage"
+                                                          Focusable="True"
                                                           Cursor="SizeAll"
                                                           RenderTransformOrigin="0.5,0.5"
                                                           MouseLeftButtonDown="PreviewImage_MouseLeftButtonDown"
@@ -1067,7 +1076,7 @@
                                                           MouseWheel="PreviewImage_MouseWheel">
                                                         <Grid.ContextMenu>
                                                             <ContextMenu>
-                                                                <MenuItem Header="꽉 차게" Tag="Fill" Click="PreviewImageContextMenu_Click" />
+                                                                <MenuItem Header="배경으로 꽉 채우기" Tag="Fill" Click="PreviewImageContextMenu_Click" />
                                                                 <MenuItem Header="좌회전" Tag="RotateLeft" Click="PreviewImageContextMenu_Click" />
                                                                 <MenuItem Header="우회전" Tag="RotateRight" Click="PreviewImageContextMenu_Click" />
                                                             </ContextMenu>
@@ -1076,7 +1085,7 @@
                                                             <RotateTransform Angle="{Binding Entry.BackImageRotation}" />
                                                         </Grid.RenderTransform>
                                                         <Image Source="{Binding Entry.BackImagePath, Converter={StaticResource ImagePathToImageSourceConverter}}"
-                                                               Stretch="Uniform"
+                                                               Stretch="UniformToFill"
                                                                IsHitTestVisible="False" />
                                                         <Border BorderBrush="#2563EB"
                                                                 BorderThickness="1"

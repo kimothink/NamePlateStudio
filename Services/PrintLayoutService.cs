@@ -5,7 +5,7 @@ namespace NamePlateStudio.Services;
 
 public sealed class PrintLayoutService
 {
-    public PrintLayout CreateLayout(NamePlateDesign design)
+    public PrintLayout CreateLayout(NamePlateDesign design, IReadOnlyList<NamePlateEntry>? previewEntries = null)
     {
         var pageWidthMm = design.IsLandscape ? design.PaperHeightMm : design.PaperWidthMm;
         var pageHeightMm = design.IsLandscape ? design.PaperWidthMm : design.PaperHeightMm;
@@ -16,7 +16,7 @@ public sealed class PrintLayoutService
         var marginMm = Math.Max(0, design.PageMarginMm);
         var horizontalGapMm = Math.Max(0, design.HorizontalGapMm);
         var verticalGapMm = Math.Max(0, design.VerticalGapMm);
-        var entries = GetPrintableEntries(design);
+        var entries = previewEntries ?? GetPrintableEntries(design);
         var copyCount = entries.Count;
 
         var printableWidthMm = pageWidthMm - marginMm * 2;

@@ -25,6 +25,9 @@ public partial class MainViewModel : ObservableObject
     private readonly ImageFileService imageFileService = new();
     private readonly PrintLayoutService layoutService = new();
     private bool isSynchronizingImages;
+    private bool isLoadingImageSettings;
+    private readonly NamePlateEntry savedFrontImage = new();
+    private readonly NamePlateEntry savedBackImage = new();
 
     public MainViewModel()
     {
@@ -120,7 +123,7 @@ public partial class MainViewModel : ObservableObject
     private string verticalTextAlignment = "가운데";
 
     [ObservableProperty]
-    private bool hasDecorationLine = true;
+    private bool hasDecorationLine;
 
     [ObservableProperty]
     private double overlayImageX = 8;
@@ -181,6 +184,9 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     private double horizontalGapMm = 5;
+
+    [ObservableProperty]
+    private double backPrintOffsetXMm;
 
     [ObservableProperty]
     private double verticalGapMm = 5;
@@ -352,6 +358,7 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
+        SelectedEntry.BackgroundImagePath = string.Empty;
         SelectedEntry.OverlayImagePath = string.Empty;
         StatusMessage = "선택한 항목의 앞면 그림을 제거했습니다.";
     }
@@ -493,6 +500,23 @@ public partial class MainViewModel : ObservableObject
         }
 
         StatusMessage = "뒷면 그림의 원본 전체가 보이도록 크기와 위치를 맞췄습니다.";
+    }
+
+    [RelayCommand]
+    private void FillBackImage()
+    {
+        if (SelectedEntry is not { } entry || string.IsNullOrWhiteSpace(entry.BackImagePath))
+        {
+            StatusMessage = "꽉 채울 뒷면 그림을 먼저 선택해주세요.";
+            return;
+        }
+
+        entry.BackImageX = 0;
+        entry.BackImageY = 0;
+        entry.BackImageWidthMm = Math.Max(1, WidthMm);
+        entry.BackImageHeightMm = Math.Max(1, HeightMm);
+        entry.BackImageRotation = 0;
+        StatusMessage = "뒷면 그림을 배경처럼 명패 전체에 꽉 채웠습니다.";
     }
 
     [RelayCommand]
@@ -746,23 +770,80 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnApplyFrontImagesToAllEntriesChanged(bool value)
     {
-        if (!value || SelectedEntry is null || Entries.Count == 0)
+        if (isLoadingImageSettings) return;
+        var source = SelectedEntry is { } selected && !string.IsNullOrWhiteSpace(ResolveFrontImagePath(selected))
+            ? selected
+            : Entries.FirstOrDefault(entry => !string.IsNullOrWhiteSpace(ResolveFrontImagePath(entry)));
+        if (source is not null)
         {
+            CopyFrontImages(source, savedFrontImage);
+        }
+
+        if (!value)
+        {
+            isSynchronizingImages = true;
+            try
+            {
+                foreach (var entry in Entries)
+                {
+                    entry.BackgroundImagePath = string.Empty;
+                    entry.OverlayImagePath = string.Empty;
+                }
+            }
+            finally
+            {
+                isSynchronizingImages = false;
+            }
+            StatusMessage = "모든 명찰의 앞면 그림을 지웠습니다. 체크하면 다시 적용됩니다.";
             return;
         }
 
-        SynchronizeFrontImagesFrom(SelectedEntry);
+        if (string.IsNullOrWhiteSpace(savedFrontImage.OverlayImagePath))
+        {
+            StatusMessage = "앞면 그림을 선택하면 모든 명찰에 적용됩니다.";
+            return;
+        }
+
+        SynchronizeFrontImagesFrom(savedFrontImage);
         StatusMessage = $"현재 앞면 그림 설정을 {Entries.Count}개 명찰에 적용했습니다.";
     }
 
     partial void OnApplyBackImagesToAllEntriesChanged(bool value)
     {
-        if (!value || SelectedEntry is null || Entries.Count == 0)
+        if (isLoadingImageSettings) return;
+        var source = SelectedEntry is { } selected && !string.IsNullOrWhiteSpace(selected.BackImagePath)
+            ? selected
+            : Entries.FirstOrDefault(entry => !string.IsNullOrWhiteSpace(entry.BackImagePath));
+        if (source is not null)
         {
+            CopyBackImages(source, savedBackImage);
+        }
+
+        if (!value)
+        {
+            isSynchronizingImages = true;
+            try
+            {
+                foreach (var entry in Entries)
+                {
+                    entry.BackImagePath = string.Empty;
+                }
+            }
+            finally
+            {
+                isSynchronizingImages = false;
+            }
+            StatusMessage = "모든 명찰의 뒷면 그림을 지웠습니다. 체크하면 다시 적용됩니다.";
             return;
         }
 
-        SynchronizeBackImagesFrom(SelectedEntry);
+        if (string.IsNullOrWhiteSpace(savedBackImage.BackImagePath))
+        {
+            StatusMessage = "뒷면 그림을 선택하면 모든 명찰에 적용됩니다.";
+            return;
+        }
+
+        SynchronizeBackImagesFrom(savedBackImage);
         StatusMessage = $"현재 뒷면 그림 설정을 {Entries.Count}개 명찰에 적용했습니다.";
     }
 
@@ -964,12 +1045,16 @@ public partial class MainViewModel : ObservableObject
             CopyCount = Math.Max(1, entries.Count),
             PageMarginMm = PageMarginMm,
             HorizontalGapMm = HorizontalGapMm,
+            BackPrintOffsetXMm = BackPrintOffsetXMm,
             VerticalGapMm = VerticalGapMm
         };
     }
 
     private void ApplyDesign(NamePlateDesign design)
     {
+        // Reset the previous document's switches without changing its or the new document's images.
+        savedFrontImage.OverlayImagePath = string.Empty;
+        savedBackImage.BackImagePath = string.Empty;
         WidthMm = design.WidthMm;
         HeightMm = design.HeightMm;
         SelectedFontFamily = string.IsNullOrWhiteSpace(design.FontFamily) ? "Malgun Gothic" : design.FontFamily;
@@ -987,7 +1072,7 @@ public partial class MainViewModel : ObservableObject
         IsItalic = design.IsItalic;
         HorizontalTextAlignment = NormalizeHorizontalAlignment(design.HorizontalTextAlignment);
         VerticalTextAlignment = NormalizeVerticalAlignment(design.VerticalTextAlignment);
-        HasDecorationLine = design.HasDecorationLine;
+        HasDecorationLine = false;
         OverlayImageX = design.OverlayImageX;
         OverlayImageY = design.OverlayImageY;
         OverlayImageWidth = design.OverlayImageWidth <= 0 ? 18 : design.OverlayImageWidth;
@@ -998,9 +1083,19 @@ public partial class MainViewModel : ObservableObject
         var entries = design.Entries is { Count: > 0 }
             ? design.Entries
             : [new NamePlateEntry(design.NameText, design.TitleText, design.CompanyText)];
-        ApplyEntries(entries);
-        ApplyFrontImagesToAllEntries = design.ApplyFrontImagesToAllEntries;
-        ApplyBackImagesToAllEntries = design.ApplyBackImagesToAllEntries;
+        isLoadingImageSettings = true;
+        try
+        {
+            ApplyFrontImagesToAllEntries = false;
+            ApplyBackImagesToAllEntries = false;
+            ApplyEntries(entries);
+            ApplyFrontImagesToAllEntries = design.ApplyFrontImagesToAllEntries;
+            ApplyBackImagesToAllEntries = design.ApplyBackImagesToAllEntries;
+        }
+        finally
+        {
+            isLoadingImageSettings = false;
+        }
         MatchBackBackgroundToImage = design.MatchBackBackgroundToImage;
 
         var paperOption = PaperSizes.FirstOrDefault(option => option.Name == design.PaperSizeName)
@@ -1013,6 +1108,7 @@ public partial class MainViewModel : ObservableObject
         BackFontSize = design.BackFontSize <= 0 ? 20 : design.BackFontSize;
         PageMarginMm = Math.Max(0, design.PageMarginMm);
         HorizontalGapMm = Math.Max(0, design.HorizontalGapMm);
+        BackPrintOffsetXMm = design.BackPrintOffsetXMm;
         VerticalGapMm = Math.Max(0, design.VerticalGapMm);
 
         RefreshPreviewProperties();
@@ -1172,7 +1268,7 @@ public partial class MainViewModel : ObservableObject
     private static void CopyFrontImages(NamePlateEntry source, NamePlateEntry target)
     {
         target.BackgroundImagePath = string.Empty;
-        target.OverlayImagePath = source.OverlayImagePath;
+        target.OverlayImagePath = ResolveFrontImagePath(source);
     }
 
     private static void CopyBackImages(NamePlateEntry source, NamePlateEntry target)
@@ -1242,7 +1338,7 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        var layout = layoutService.CreateLayout(CreateDesignSnapshot());
+        var layout = layoutService.CreateLayout(CreateDesignSnapshot(), Entries);
         PreviewPageCount = Math.Max(1, layout.PageCount);
         if (PreviewPageIndex >= PreviewPageCount)
         {

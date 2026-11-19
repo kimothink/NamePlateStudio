@@ -46,8 +46,14 @@ public sealed class PrintService
             }
 
             var dialog = new PrintDialog();
-            dialog.PrintTicket.PageMediaSize = new PageMediaSize(layout.PageWidthPixels, layout.PageHeightPixels);
-            dialog.PrintTicket.PageOrientation = design.IsLandscape ? PageOrientation.Landscape : PageOrientation.Portrait;
+            // Media dimensions are specified before the driver applies page orientation.
+            var mediaSize = new PageMediaSize(
+                UnitConverter.MillimetersToPixels(design.PaperWidthMm),
+                UnitConverter.MillimetersToPixels(design.PaperHeightMm));
+            var orientation = design.IsLandscape ? PageOrientation.Landscape : PageOrientation.Portrait;
+            var duplex = design.IsLandscape ? Duplexing.TwoSidedShortEdge : Duplexing.TwoSidedLongEdge;
+            dialog.PrintTicket.PageMediaSize = mediaSize;
+            dialog.PrintTicket.PageOrientation = orientation;
             var outputPageCount = GetOutputPageCount(design, layout);
             dialog.MinPage = 1;
             dialog.MaxPage = (uint)Math.Max(1, outputPageCount);
@@ -56,13 +62,40 @@ public sealed class PrintService
             dialog.SelectedPagesEnabled = selectedEntryIndex.HasValue;
             if (design.IsDoubleSided)
             {
-                dialog.PrintTicket.Duplexing = Duplexing.TwoSidedLongEdge;
+                dialog.PrintTicket.Duplexing = duplex;
             }
 
             if (dialog.ShowDialog() != true)
             {
                 message = "인쇄가 취소되었습니다.";
                 return false;
+            }
+
+            if (design.IsDoubleSided)
+            {
+                // Flip around the vertical edge of the oriented page, matching the mirrored X placement.
+                var requestedTicket = new PrintTicket
+                {
+                    PageMediaSize = mediaSize,
+                    PageOrientation = orientation,
+                    Duplexing = duplex,
+                    PageScalingFactor = 100
+                };
+                var ticket = dialog.PrintQueue.MergeAndValidatePrintTicket(dialog.PrintTicket, requestedTicket)
+                    .ValidatedPrintTicket;
+                var actualMedia = ticket.PageMediaSize;
+                const double mediaTolerance = 2; // WPF device-independent units
+                if (ticket.Duplexing != duplex || ticket.PageOrientation != orientation ||
+                    actualMedia?.Width is not double width || actualMedia.Height is not double height ||
+                    Math.Abs(width - mediaSize.Width!.Value) > mediaTolerance ||
+                    Math.Abs(height - mediaSize.Height!.Value) > mediaTolerance ||
+                    ticket.PageScalingFactor is int scaling && scaling != 100)
+                {
+                    message = "선택한 프린터에서 현재 용지 크기, 방향, 뒤집기 방식으로 양면 인쇄할 수 없습니다.";
+                    return false;
+                }
+
+                dialog.PrintTicket = ticket;
             }
 
             var printSelection = GetPrintSelection(
@@ -268,8 +301,9 @@ public sealed class PrintService
         var fixedDocument = new FixedDocument();
         fixedDocument.DocumentPaginator.PageSize = new Size(layout.PageWidthPixels, layout.PageHeightPixels);
 
-        foreach (var page in CreateOutputPages(design, layout, selection.CopyNumber)
-                     .Where((_, index) => selection.OutputPageIndexes.Contains(index)))
+        foreach (var (page, index) in CreateOutputPages(design, layout, selection.CopyNumber)
+                     .Select((page, index) => (page, index))
+                     .Where(item => selection.OutputPageIndexes.Contains(item.index)))
         {
             var fixedPage = new FixedPage
             {
@@ -277,6 +311,10 @@ public sealed class PrintService
                 Height = layout.PageHeightPixels,
                 Background = Brushes.White
             };
+            if (design.IsDoubleSided && index % 2 == 1 && double.IsFinite(design.BackPrintOffsetXMm))
+            {
+                FixedPage.SetLeft(page, UnitConverter.MillimetersToPixels(design.BackPrintOffsetXMm));
+            }
             fixedPage.Children.Add(page);
             PreparePage(fixedPage, layout);
 
@@ -610,7 +648,7 @@ public sealed class PrintService
                 Source = backImage,
                 Width = UnitConverter.MillimetersToPixels(entry.BackImageWidthMm > 0 ? entry.BackImageWidthMm : 1),
                 Height = UnitConverter.MillimetersToPixels(entry.BackImageHeightMm > 0 ? entry.BackImageHeightMm : 1),
-                Stretch = Stretch.Uniform,
+                Stretch = Stretch.UniformToFill,
                 RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
                 RenderTransform = new RotateTransform(entry.BackImageRotation)
             };

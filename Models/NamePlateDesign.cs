@@ -57,7 +57,7 @@ public sealed class NamePlateDesign
 
     public string VerticalTextAlignment { get; set; } = "가운데";
 
-    public bool HasDecorationLine { get; set; } = true;
+    public bool HasDecorationLine { get; set; }
 
     public double OverlayImageX { get; set; } = 8;
 
@@ -92,6 +92,8 @@ public sealed class NamePlateDesign
     public double PageMarginMm { get; set; } = 5;
 
     public double HorizontalGapMm { get; set; } = 5;
+
+    public double BackPrintOffsetXMm { get; set; }
 
     public double VerticalGapMm { get; set; } = 5;
 }
