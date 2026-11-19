@@ -229,9 +229,9 @@ public partial class MainViewModel : ObservableObject
 
     public double CompanyFontSize => Math.Max(10, FontSize * 0.36);
 
-    public double TitlePositionYPixels => PositionYPixels + FontSize * 0.82;
+    public double TitlePositionYPixels => PositionYPixels + FontSize * 1.02;
 
-    public double CompanyPositionYPixels => PositionYPixels - FontSize * 0.95;
+    public double CompanyPositionYPixels => PositionYPixels - FontSize * 1.15;
 
     public double DecorationLineStartX => PreviewWidthPixels * 0.08;
 

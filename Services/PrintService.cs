@@ -594,9 +594,9 @@ public sealed class PrintService
         }
 
         AddOverlayImage(canvas, entry, design);
-        AddAnchoredText(canvas, entry.CompanyText, design, Math.Max(10, design.FontSize * 0.36), -design.FontSize * 0.95, fontBrush, FontWeights.Normal);
+        AddAnchoredText(canvas, entry.CompanyText, design, Math.Max(10, design.FontSize * 0.36), -design.FontSize * 1.15, fontBrush, FontWeights.Normal);
         AddAnchoredText(canvas, entry.NameText, design, design.FontSize, 0, fontBrush, design.IsBold ? FontWeights.Bold : FontWeights.Normal);
-        AddAnchoredText(canvas, entry.TitleText, design, Math.Max(10, design.FontSize * 0.42), design.FontSize * 0.82, fontBrush, FontWeights.Normal);
+        AddAnchoredText(canvas, entry.TitleText, design, Math.Max(10, design.FontSize * 0.42), design.FontSize * 1.02, fontBrush, FontWeights.Normal);
 
         if (showOutputGuide)
         {
