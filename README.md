@@ -4,7 +4,7 @@ NamePlateStudio는 아크릴/책상용 명패 안쪽에 넣을 이름표를 직�
 
 ## 다운로드
 
-- 최신 설치 파일: [NamePlateStudio-Setup-1.1.4-win-x64.exe](https://github.com/kimothink/NamePlateStudio/releases/download/v1.1.4/NamePlateStudio-Setup-1.1.4-win-x64.exe)
+- 최신 설치 파일: [NamePlateStudio-Setup-1.1.5-win-x64.exe](https://github.com/kimothink/NamePlateStudio/releases/download/v1.1.5/NamePlateStudio-Setup-1.1.5-win-x64.exe)
 - 소개 페이지: [https://kimothink.github.io/NamePlateStudio/](https://kimothink.github.io/NamePlateStudio/)
 - SHA256: `8110D2CEF587A2586B932D1F0ACE5F4C64C3512008C5CC3E3456AE8CC5818237`
 
@@ -86,11 +86,11 @@ dotnet run --project .\NamePlateStudio.csproj
 NSIS가 설치되어 있으면 다음 명령으로 self-contained Windows 설치 파일을 만들 수 있습니다.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\Installer\Build-Installer.ps1 -Version 1.1.4
+powershell -ExecutionPolicy Bypass -File .\Installer\Build-Installer.ps1 -Version 1.1.5
 ```
 
 생성 위치:
 
 ```text
-dist\NamePlateStudio-Setup-1.1.4-win-x64.exe
+dist\NamePlateStudio-Setup-1.1.5-win-x64.exe
 ```

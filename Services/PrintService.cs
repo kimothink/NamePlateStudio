@@ -313,7 +313,7 @@ public sealed class PrintService
             };
             if (design.IsDoubleSided && index % 2 == 1 && double.IsFinite(design.BackPrintOffsetXMm))
             {
-                FixedPage.SetLeft(page, UnitConverter.MillimetersToPixels(design.BackPrintOffsetXMm));
+                FixedPage.SetLeft(page, UnitConverter.MillimetersToPixels(design.BackPrintOffsetXMm - 0.5));
             }
             fixedPage.Children.Add(page);
             PreparePage(fixedPage, layout);
