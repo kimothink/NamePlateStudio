@@ -3,7 +3,7 @@
 !endif
 
 !ifndef APP_VERSION
-  !define APP_VERSION "1.1.7"
+  !define APP_VERSION "1.1.8"
 !endif
 
 !ifndef PUBLISH_DIR

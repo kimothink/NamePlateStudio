@@ -51,7 +51,10 @@ public partial class MainViewModel : ObservableObject
         ];
         selectedPaperSize = PaperSizes[0];
 
-        Entries.CollectionChanged += EntriesCollectionChanged;
+        Groups.Add(new NamePlateGroup("발표자"));
+        Groups.Add(new NamePlateGroup("스탭"));
+        Groups.Add(new NamePlateGroup("운영진"));
+        SelectedGroup = Groups[0];
         ApplyEntries(new NamePlateDesign().Entries);
         RefreshPreviewProperties();
     }
@@ -60,7 +63,49 @@ public partial class MainViewModel : ObservableObject
 
     public ObservableCollection<PaperSizeOption> PaperSizes { get; }
 
-    public ObservableCollection<NamePlateEntry> Entries { get; } = [];
+    public ObservableCollection<NamePlateGroup> Groups { get; } = [];
+
+    [ObservableProperty]
+    private NamePlateGroup? selectedGroup;
+
+    private readonly ObservableCollection<NamePlateEntry> emptyEntries = [];
+
+    public ObservableCollection<NamePlateEntry> Entries => SelectedGroup?.Entries ?? emptyEntries;
+
+    partial void OnSelectedGroupChanging(NamePlateGroup? value)
+    {
+        Entries.CollectionChanged -= EntriesCollectionChanged;
+        foreach (var entry in Entries)
+        {
+            entry.PropertyChanged -= EntryPropertyChanged;
+        }
+    }
+
+    partial void OnSelectedGroupChanged(NamePlateGroup? value)
+    {
+        Entries.CollectionChanged += EntriesCollectionChanged;
+        foreach (var entry in Entries)
+        {
+            entry.PropertyChanged += EntryPropertyChanged;
+        }
+        SelectedEntry = Entries.FirstOrDefault();
+        savedFrontImage.OverlayImagePath = string.Empty;
+        savedBackImage.BackImagePath = string.Empty;
+        OnPropertyChanged(nameof(Entries));
+        PreviewPageIndex = 0;
+        RefreshPreviewProperties();
+    }
+
+    [RelayCommand]
+    private void AddGroup()
+    {
+        var number = 1;
+        while (Groups.Any(group => group.Name == $"새 그룹 {number}")) number++;
+        var group = new NamePlateGroup($"새 그룹 {number}");
+        Groups.Add(group);
+        SelectedGroup = group;
+        StatusMessage = "새 그룹을 추가했습니다. 탭 이름을 편집할 수 있습니다.";
+    }
 
     public ObservableCollection<NamePlatePlacement> PreviewPlacements { get; } = [];
 
@@ -303,6 +348,42 @@ public partial class MainViewModel : ObservableObject
         StatusMessage = "선택한 항목을 삭제했습니다.";
     }
 
+    public void ApplyTextToSelectedEntries(NamePlateEntry source, IReadOnlyList<NamePlateEntry> selectedEntries, string field)
+    {
+        if (!Entries.Contains(source) || selectedEntries.Count == 0)
+        {
+            StatusMessage = "문구를 적용할 행을 선택해주세요.";
+            return;
+        }
+
+        var (text, label) = field switch
+        {
+            nameof(NamePlateEntry.TitleText) => (source.TitleText, "소개 문구"),
+            nameof(NamePlateEntry.CompanyText) => (source.CompanyText, "소속/메모"),
+            nameof(NamePlateEntry.BackContent) => (source.BackContent, "뒷면 문구"),
+            _ => (string.Empty, string.Empty)
+        };
+        if (label.Length == 0) return;
+
+        var targets = selectedEntries.Where(Entries.Contains).Distinct().ToList();
+        foreach (var entry in targets)
+        {
+            switch (field)
+            {
+                case nameof(NamePlateEntry.TitleText):
+                    entry.TitleText = text;
+                    break;
+                case nameof(NamePlateEntry.CompanyText):
+                    entry.CompanyText = text;
+                    break;
+                case nameof(NamePlateEntry.BackContent):
+                    entry.BackContent = text;
+                    break;
+            }
+        }
+        StatusMessage = $"현재 행의 {label}를 선택한 {targets.Count}개 명찰에 적용했습니다.";
+    }
+
     [RelayCommand]
     private void ApplyBackContentToAll()
     {
@@ -540,14 +621,17 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void Save()
     {
-        if (!TryCreateDesign(out var design))
-        {
-            return;
-        }
-
         try
         {
-            var path = fileService.Save(design!);
+            var design = CreateDesignSnapshot();
+            design.GroupNames = Groups.Select(group => group.Name).ToList();
+            design.SelectedGroupIndex = SelectedGroup is null ? 0 : Groups.IndexOf(SelectedGroup);
+            design.Entries = Groups.SelectMany((group, index) =>
+            {
+                foreach (var entry in group.Entries) entry.GroupIndex = index;
+                return group.Entries;
+            }).ToList();
+            var path = fileService.Save(design);
             StatusMessage = path is null ? "양식 저장이 취소되었습니다." : $"양식 저장 완료: {path}";
         }
         catch (Exception ex)
@@ -1080,15 +1164,30 @@ public partial class MainViewModel : ObservableObject
         OverlayImageRotation = NormalizeDegrees(design.OverlayImageRotation);
         LockImageAspectRatio = design.LockImageAspectRatio;
 
-        var entries = design.Entries is { Count: > 0 }
-            ? design.Entries
-            : [new NamePlateEntry(design.NameText, design.TitleText, design.CompanyText)];
+        var entries = design.GroupNames is { Count: > 0 }
+            ? design.Entries ?? []
+            : design.Entries is { Count: > 0 }
+                ? design.Entries
+                : [new NamePlateEntry(design.NameText, design.TitleText, design.CompanyText)];
         isLoadingImageSettings = true;
         try
         {
             ApplyFrontImagesToAllEntries = false;
             ApplyBackImagesToAllEntries = false;
-            ApplyEntries(entries);
+            SelectedGroup = null;
+            Groups.Clear();
+            var groupNames = design.GroupNames is { Count: > 0 }
+                ? design.GroupNames
+                : new List<string> { "발표자", "스탭", "운영진" };
+            foreach (var name in groupNames)
+            {
+                Groups.Add(new NamePlateGroup(name));
+            }
+            foreach (var entry in entries)
+            {
+                Groups[Math.Clamp(entry.GroupIndex, 0, Groups.Count - 1)].Entries.Add(entry);
+            }
+            SelectedGroup = Groups[Math.Clamp(design.SelectedGroupIndex, 0, Groups.Count - 1)];
             ApplyFrontImagesToAllEntries = design.ApplyFrontImagesToAllEntries;
             ApplyBackImagesToAllEntries = design.ApplyBackImagesToAllEntries;
         }

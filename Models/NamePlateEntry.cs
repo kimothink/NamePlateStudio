@@ -4,6 +4,8 @@ namespace NamePlateStudio.Models;
 
 public partial class NamePlateEntry : ObservableObject
 {
+    public int GroupIndex { get; set; }
+
     [ObservableProperty]
     private string nameText = string.Empty;
 

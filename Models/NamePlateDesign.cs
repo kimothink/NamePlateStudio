@@ -6,6 +6,10 @@ namespace NamePlateStudio.Models;
 /// </summary>
 public sealed class NamePlateDesign
 {
+    public List<string> GroupNames { get; set; } = [];
+
+    public int SelectedGroupIndex { get; set; }
+
     public double WidthMm { get; set; } = 200;
 
     public double HeightMm { get; set; } = 80;

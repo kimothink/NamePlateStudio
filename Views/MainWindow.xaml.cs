@@ -26,6 +26,25 @@ public partial class MainWindow : Window
         DataContext = new MainViewModel();
     }
 
+    private void ApplyTextToSelectedEntries_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.Button { Tag: string field } ||
+            DataContext is not MainViewModel viewModel ||
+            EntriesGrid.CurrentItem is not NamePlateEntry source)
+        {
+            return;
+        }
+
+        if (!EntriesGrid.CommitEdit(DataGridEditingUnit.Cell, true) ||
+            !EntriesGrid.CommitEdit(DataGridEditingUnit.Row, true))
+        {
+            return;
+        }
+
+        var entries = EntriesGrid.SelectedItems.OfType<NamePlateEntry>().ToList();
+        viewModel.ApplyTextToSelectedEntries(source, entries, field);
+    }
+
     protected override void OnClosing(CancelEventArgs e)
     {
         var result = MessageBox.Show(
