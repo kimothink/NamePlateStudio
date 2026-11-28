@@ -50,6 +50,14 @@ public sealed class PrintService
             var mediaSize = new PageMediaSize(
                 UnitConverter.MillimetersToPixels(design.PaperWidthMm),
                 UnitConverter.MillimetersToPixels(design.PaperHeightMm));
+            if (Math.Abs(design.PaperWidthMm - 210) < 0.1 && Math.Abs(design.PaperHeightMm - 297) < 0.1)
+            {
+                mediaSize = new PageMediaSize(PageMediaSizeName.ISOA4);
+            }
+            else if (Math.Abs(design.PaperWidthMm - 297) < 0.1 && Math.Abs(design.PaperHeightMm - 420) < 0.1)
+            {
+                mediaSize = new PageMediaSize(PageMediaSizeName.ISOA3);
+            }
             var orientation = design.IsLandscape ? PageOrientation.Landscape : PageOrientation.Portrait;
             var duplex = design.IsLandscape ? Duplexing.TwoSidedShortEdge : Duplexing.TwoSidedLongEdge;
             dialog.PrintTicket.PageMediaSize = mediaSize;
@@ -78,20 +86,14 @@ public sealed class PrintService
                 {
                     PageMediaSize = mediaSize,
                     PageOrientation = orientation,
-                    Duplexing = duplex,
-                    PageScalingFactor = 100
+                    Duplexing = duplex
                 };
                 var ticket = dialog.PrintQueue.MergeAndValidatePrintTicket(dialog.PrintTicket, requestedTicket)
                     .ValidatedPrintTicket;
-                var actualMedia = ticket.PageMediaSize;
-                const double mediaTolerance = 2; // WPF device-independent units
-                if (ticket.Duplexing != duplex || ticket.PageOrientation != orientation ||
-                    actualMedia?.Width is not double width || actualMedia.Height is not double height ||
-                    Math.Abs(width - mediaSize.Width!.Value) > mediaTolerance ||
-                    Math.Abs(height - mediaSize.Height!.Value) > mediaTolerance ||
-                    ticket.PageScalingFactor is int scaling && scaling != 100)
+                // Drivers can report named paper sizes and leave optional dimensions unspecified.
+                if (ticket.Duplexing.HasValue && ticket.Duplexing != duplex)
                 {
-                    message = "선택한 프린터에서 현재 용지 크기, 방향, 뒤집기 방식으로 양면 인쇄할 수 없습니다.";
+                    message = $"프린터가 요청한 양면 설정을 적용하지 못했습니다. 프린터 속성의 용지 종류와 양면 설정을 확인해주세요. 요청: {duplex}, 적용: {ticket.Duplexing}";
                     return false;
                 }
 
@@ -313,7 +315,7 @@ public sealed class PrintService
             };
             if (design.IsDoubleSided && index % 2 == 1 && double.IsFinite(design.BackPrintOffsetXMm))
             {
-                FixedPage.SetLeft(page, UnitConverter.MillimetersToPixels(design.BackPrintOffsetXMm - 0.5));
+                FixedPage.SetLeft(page, UnitConverter.MillimetersToPixels(design.BackPrintOffsetXMm - 1.0));
             }
             fixedPage.Children.Add(page);
             PreparePage(fixedPage, layout);
