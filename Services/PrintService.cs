@@ -772,8 +772,8 @@ public sealed class PrintService
     {
         return alignment switch
         {
-            "왼쪽" or "Left" => anchorX,
-            "오른쪽" or "Right" => anchorX - desiredWidth,
+            "왼쪽" or "Left" => anchorX - desiredWidth,
+            "오른쪽" or "Right" => anchorX,
             _ => anchorX - desiredWidth / 2.0
         };
     }
@@ -782,8 +782,8 @@ public sealed class PrintService
     {
         return alignment switch
         {
-            "위" or "Top" => anchorY,
-            "아래" or "Bottom" => anchorY - desiredHeight,
+            "위" or "Top" => anchorY - desiredHeight,
+            "아래" or "Bottom" => anchorY,
             _ => anchorY - desiredHeight / 2.0
         };
     }

@@ -1,7 +1,7 @@
 param(
     [string]$Configuration = "Release",
     [string]$Runtime = "win-x64",
-    [string]$Version = "1.1.6",
+    [string]$Version = "1.1.7",
     [switch]$FrameworkDependent
 )
 

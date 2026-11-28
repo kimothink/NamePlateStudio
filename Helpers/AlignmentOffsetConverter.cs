@@ -16,8 +16,8 @@ public sealed class AlignmentOffsetConverter : IMultiValueConverter
 
         return alignment switch
         {
-            "왼쪽" or "위" or "Left" or "Top" => 0.0,
-            "오른쪽" or "아래" or "Right" or "Bottom" => -size,
+            "왼쪽" or "위" or "Left" or "Top" => -size,
+            "오른쪽" or "아래" or "Right" or "Bottom" => 0.0,
             _ => -size / 2.0
         };
     }
